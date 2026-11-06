@@ -1,0 +1,61 @@
+[package]
+name = "edgepass"
+version = "0.2.0"
+description = "Collapsible OpenBao secret widget for Windows and macOS"
+authors = ["Xhuk"]
+edition = "2021"
+
+[lib]
+name = "edgepass_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-clipboard-manager = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "net", "io-util", "time"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+keyring = { version = "3", features = ["apple-native", "windows-native", "linux-native"] }
+dirs = "6"
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2"
+url = "2"
+parking_lot = "0.12"
+serde_yaml_ng = "0.10"
+
+# The IPC pipe's DACL (see `pipe_acl.rs`): a named pipe is created without a
+# security descriptor by default, which leaves it at the mercy of the logon
+# session's default DACL.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_System_Threading",
+    # GetAsyncKeyState, para saber si el usuario sigue con el botón pulsado
+    # mientras arrastra la pastilla (ver `pointer.rs`), y
+    # GetUserDefaultLocaleName para el idioma de los rótulos (ver `locale.rs`).
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_Globalization",
+    # BCryptGenRandom, para acuñar el token/gate secret de un servidor MCP
+    # (ver `mcp.rs`). Es el CSPRNG del sistema: no sumamos un crate de RNG.
+    "Win32_Security_Cryptography",
+] }
+
+# Required for production (`tauri build`): embeds the frontend and serves it via
+# the custom protocol instead of http://localhost:1420 (Vite). Do not remove.
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true

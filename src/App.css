@@ -1,0 +1,2650 @@
+/* =============================================================================
+   edgePass — visual system
+   -----------------------------------------------------------------------------
+   A floating HUD, so it follows Apple's material hierarchy rather than a web
+   "card": one translucent layer, a hairline where light catches the edge, and
+   depth built from stacked shadows instead of a single big blur.
+
+   Deliberate choices worth keeping in mind:
+   - The window is transparent (tauri.conf.json) and the material lives here.
+     `backdrop-filter` samples the desktop behind the webview, so this reads as
+     real vibrancy and degrades to a solid panel if the platform can't blur.
+   - Dark-only, on purpose: HUD materials are dark in macOS regardless of the
+     desktop behind them, and one theme done well beats two done badly.
+   - Type uses the *platform* system font (system-ui), which is SF on macOS and
+     Segoe UI Variable on Windows — the guideline is to prefer the system face
+     before any custom one.
+   ========================================================================== */
+
+:root {
+  color-scheme: dark;
+
+  /* Materials — weight encodes hierarchy, never stack a light surface on one */
+  --material: rgba(16, 18, 22, 0.78);
+  --material-dock: rgba(16, 18, 22, 0.86);
+  --material-chrome: rgba(255, 255, 255, 0.045);
+  --material-field: rgba(0, 0, 0, 0.26);
+  --material-raised: rgba(255, 255, 255, 0.075);
+  --blur: 34px;
+  --saturate: 180%;
+
+  /* Light catching the material */
+  --hairline: rgba(255, 255, 255, 0.1);
+  --hairline-strong: rgba(255, 255, 255, 0.16);
+  --specular: rgba(255, 255, 255, 0.09);
+
+  /* Text — vibrant, high contrast, because it sits over a translucent layer */
+  --text: rgba(255, 255, 255, 0.96);
+  --text-2: rgba(233, 240, 248, 0.64);
+  --text-3: rgba(233, 240, 248, 0.4);
+
+  /* Accent + semantics (pushed brighter to hold up on the dark material) */
+  --accent: #5ac6b7;
+  --accent-strong: #6fd4c5;
+  --accent-ink: #04211d;
+  --accent-soft: rgba(90, 198, 183, 0.16);
+  --ok: #58c9a5;
+  --warn: #e0b072;
+  --danger: #ec8075;
+  --ring: 0 0 0 3px rgba(90, 198, 183, 0.32);
+
+  /* Geometry — a capsule for the pill, a generous radius for the panel */
+  --r-window: 18px;
+  --r-dock: 16px;
+  --r-control: 9px;
+  --r-field: 10px;
+  --r-card: 20px;
+  --r-pill: 999px;
+
+  /* Depth: contact shadow + ambient + key light, in layers */
+  --shadow-window:
+    0 0 0 0.5px rgba(0, 0, 0, 0.4),
+    0 1px 1px rgba(0, 0, 0, 0.24),
+    0 8px 20px rgba(0, 0, 0, 0.32),
+    0 24px 64px rgba(0, 0, 0, 0.42);
+  --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.28), 0 6px 16px rgba(0, 0, 0, 0.24);
+  --shadow-card:
+    0 1px 1px rgba(0, 0, 0, 0.32),
+    0 12px 28px rgba(0, 0, 0, 0.36),
+    0 32px 80px rgba(0, 0, 0, 0.46);
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+  --dur-press: 100ms;
+  --dur: 180ms;
+
+  /* Typography */
+  --font-ui: system-ui, -apple-system, "SF Pro Text", "Segoe UI Variable Text",
+    "Segoe UI", Inter, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Segoe UI Mono",
+    Consolas, monospace;
+
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+
+/* =============================================================================
+   Shell + dock variants
+   ========================================================================== */
+
+.shell {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  color: var(--text);
+  border-radius: var(--r-window);
+  background: var(--material);
+  backdrop-filter: blur(var(--blur)) saturate(var(--saturate));
+  -webkit-backdrop-filter: blur(var(--blur)) saturate(var(--saturate));
+  /* Continuous corners where supported (Chromium 139+); ignored elsewhere. */
+  corner-shape: superellipse(1.4);
+  border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-window), inset 0 1px 0 var(--specular);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.shell.collapsed.floating {
+  border-radius: var(--r-pill);
+}
+
+/* Collapsed pill: only the bar. The drawer must not keep flex:1 space or the
+   chrome sits optically low inside the 56px window. */
+.shell.collapsed .drawer {
+  display: none;
+}
+
+.shell.collapsed .main-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.shell.collapsed .bar,
+.shell.collapsed .bar-compact {
+  flex: 1 1 auto;
+  align-self: stretch;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0 10px;
+  align-items: center;
+}
+
+.shell.collapsed .brand {
+  padding-top: 0;
+  padding-bottom: 0;
+  height: 30px;
+}
+
+.shell.collapsed .actions {
+  height: 100%;
+  align-items: center;
+}
+
+/* Collapsed toast must not paint over the bar (was inset:0 + transparent,
+   which left ghost text and made the controls look bottom-heavy). */
+.shell.collapsed .toast {
+  left: 8px;
+  right: 8px;
+  top: auto;
+  bottom: 4px;
+  padding: 4px 8px;
+  font-size: 10.5px;
+  pointer-events: none;
+  opacity: 0.92;
+  background: rgba(16, 18, 22, 0.88);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-pill);
+}
+
+.shell.docked {
+  background: var(--material-dock);
+  border-radius: var(--r-dock);
+  box-shadow: var(--shadow-raised), inset 0 1px 0 var(--specular);
+}
+
+.shell.dock-left {
+  border-radius: 0 var(--r-dock) var(--r-dock) 0;
+  border-left: 0;
+}
+
+.shell.dock-right {
+  border-radius: var(--r-dock) 0 0 var(--r-dock);
+  border-right: 0;
+}
+
+.shell.dock-top {
+  border-radius: 0 0 var(--r-dock) var(--r-dock);
+  border-top: 0;
+}
+
+/* While the native window changes size, its content reflows every frame.
+   Fading it slightly hides that: a large surface shouldn't be read mid-resize
+   (Apple's own guidance for big repositions). */
+html.is-morphing .drawer,
+html.is-morphing .dock-tab {
+  opacity: 0.86;
+  transition: opacity 140ms var(--ease-out);
+}
+
+/* Content layers cross-fade in place: the pill and the panel share one slot so
+   neither ever jumps, and one can leave as the other arrives. */
+.stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* =============================================================================
+   Docked pill
+   ========================================================================== */
+
+.dock-tab {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  color: var(--text);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 4px;
+  font: inherit;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.dock-top .dock-tab {
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+}
+
+.dock-open {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 4px 2px;
+  border-radius: var(--r-control);
+  font: inherit;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+
+.dock-top .dock-open {
+  flex-direction: row;
+  flex: 1 1 auto;
+  width: auto;
+  gap: 8px;
+}
+
+.dock-open:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.dock-tab:hover {
+  background: transparent;
+}
+
+.dock-left .dock-tab,
+.dock-right .dock-tab {
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 4px;
+}
+
+/* The mark and the stacked label never shrink to make room: a rail that is too
+   short now grows the window (`sizeDockTo`, `dock.ts`), because squeezing is
+   exactly what painted `KV` on top of the last `s`. */
+.dock-left .dock-open,
+.dock-right .dock-open {
+  flex: 0 0 auto;
+}
+
+.drag-handle {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  border-radius: 6px;
+  color: var(--text-3);
+}
+
+.drag-handle:hover {
+  color: var(--text-2);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.drag-handle-bar {
+  width: 18px;
+  height: 30px;
+  margin-right: 2px;
+}
+
+.drag-handle-dock {
+  width: 100%;
+  height: 18px;
+}
+
+.dock-top .drag-handle-dock {
+  width: 18px;
+  height: 28px;
+}
+
+.drag-grip {
+  display: block;
+  width: 10px;
+  height: 14px;
+  background:
+    radial-gradient(circle, currentColor 1.1px, transparent 1.2px) 0 0 / 5px 5px,
+    radial-gradient(circle, currentColor 1.1px, transparent 1.2px) 5px 2.5px / 5px 5px;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.dock-top .drag-grip,
+.drag-handle-bar .drag-grip {
+  width: 8px;
+  height: 16px;
+}
+
+.led-toggles {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.led-toggles-dock {
+  flex-direction: column;
+  width: 100%;
+  gap: 8px;
+  /* The side rail stacks the logo, the vertical `edgePass` letters and every
+     LED. Its height is **not** fixed any more: the rail asks the window for the
+     room it needs (`sizeDockTo`, `dock.ts`) instead of scrolling inside a
+     guessed 500, which is what used to paint `KV` on top of the last letter. */
+  min-height: 0;
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.dock-top .led-toggles-dock {
+  flex-direction: row;
+  width: auto;
+  gap: 6px;
+}
+
+/* Side dock: label above LED (no room for horizontal KV|LED). */
+.led-toggles-dock .led-toggle {
+  width: 100%;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: auto;
+  min-height: 40px;
+  padding: 5px 2px 6px;
+  gap: 4px;
+}
+
+/* ── la isla ───────────────────────────────────────────────────────────────
+   Se abre con un clic en el escudo (o en la palabra `edgePass`), **no** al pasar
+   el puntero: el rail compacto es donde se tocan los LEDs, y un hover que
+   desplegaba el menú se comía esos clics. Con la isla abierta el contenido es el
+   menú interno —marca, `edgePass` horizontal y las pestañas—; los LEDs no se
+   muestran, porque ya están en la barra compacta. El ancho sale del contenido
+   (`sizeDockTo`), así que nada queda recortado en ninguna de las dos formas. */
+.dock-tab.island .dock-open {
+  flex: 0 0 auto;
+  flex-direction: row;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 4px 6px;
+}
+
+.dock-tab.island .dock-label-side {
+  flex-direction: row;
+  gap: 0;
+}
+
+.dock-tab.island .dock-label-side .dock-letter {
+  width: auto;
+}
+
+.dock-tab.island .led-toggles-dock .led-toggle {
+  flex-direction: row;
+  justify-content: center;
+  padding: 0 7px;
+  gap: 6px;
+}
+
+.dock-tab.island .led-toggles-dock .led-label {
+  order: 0;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* Con la isla abierta los LEDs **no** se muestran: la isla es el menú.
+   La barra compacta ya dice cómo está cada cosa; repetir los seis botones aquí
+   era un paso intermedio que no hacía falta. */
+.dock-tab.island .led-toggles-dock {
+  display: none;
+}
+
+/* Las pestañas dentro de la isla: el menú interno, a un clic desde la pastilla. */
+.dock-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  flex: 0 0 auto;
+}
+
+.dock-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  height: 26px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dock-menu-item:hover {
+  background: var(--material-raised);
+  color: var(--text);
+}
+
+.led-toggles-dock .led-label {
+  order: -1;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  /* Never wraps: a wrapped label is taller, which grew the column into a
+     collision — the rail's width is measured from this text instead. */
+  white-space: nowrap;
+}
+
+.dock-top .led-toggles-dock .led-toggle {
+  width: auto;
+  flex-direction: row;
+  height: 26px;
+  min-height: 0;
+  padding: 0 8px;
+  gap: 4px;
+}
+
+.dock-top .led-toggles-dock .led-label {
+  order: 0;
+}
+
+/* Side dock: one letter per row — stable column, no writing-mode jitter. */
+.dock-left .dock-label-side,
+.dock-right .dock-label-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  writing-mode: horizontal-tb;
+  text-orientation: mixed;
+  transform: none;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text);
+  line-height: 1.15;
+  flex: 0 0 auto;
+}
+
+.dock-label-side .dock-letter {
+  display: block;
+  width: 1ch;
+  text-align: center;
+  line-height: 1.2;
+}
+
+.dock-top .dock-label-top {
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  text-transform: none;
+  color: var(--text);
+  flex: 0 0 auto;
+}
+
+.dock-tab .logo-mark {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+}
+
+/* Status dot: static glow — no breathe/scale (was shifting the dock label). */
+.dock-pulse,
+.pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-3);
+  flex: 0 0 auto;
+  transition: background var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out);
+}
+
+.dock-pulse.open,
+.status-chip.open .pulse {
+  background: var(--ok);
+  box-shadow: 0 0 6px rgba(88, 201, 165, 0.5);
+}
+
+.dock-pulse.sealed,
+.dock-pulse.warn,
+.status-chip.sealed .pulse,
+.status-chip.warn .pulse {
+  background: var(--warn);
+  box-shadow: 0 0 6px rgba(224, 176, 114, 0.4);
+}
+
+.dock-pulse.down,
+.status-chip.down .pulse {
+  background: var(--danger);
+  box-shadow: 0 0 6px rgba(236, 128, 117, 0.4);
+}
+
+/* =============================================================================
+   Header
+   ========================================================================== */
+
+.main-col {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  min-height: 56px;
+  flex: 0 0 auto;
+  border-bottom: 1px solid transparent;
+  transition: border-color var(--dur) var(--ease-out);
+}
+
+.shell.expanded .bar {
+  /* Keep header chrome centered when the panel is open */
+  align-items: center;
+}
+
+.bar-compact {
+  border-bottom-color: transparent;
+  gap: 8px;
+  padding: 0 10px;
+  min-height: 0;
+  height: 100%;
+  align-items: center;
+}
+
+.bar-compact .brand {
+  flex: 0 0 auto;
+}
+
+.bar-compact .name {
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.022em;
+}
+
+.bar-compact .logo-mark {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+}
+
+.bar-compact .status-chip {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
+  overflow: hidden;
+  padding: 5px 10px;
+}
+
+.bar-compact .chip-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: 0.04em;
+}
+
+.bar-compact .actions {
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
+.bar .status-chip {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.brand {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 10px;
+  white-space: nowrap;
+  transition: background var(--dur-press) var(--ease-out);
+}
+
+.brand:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.brand:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.logo-mark {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.logo-mark svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.name {
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 5px 10px;
+  border-radius: var(--r-pill);
+  background: var(--material-chrome);
+  border: 1px solid var(--hairline);
+  justify-self: start;
+}
+
+.status-chip .chip-text {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--text-2);
+}
+
+.status-chip.open .chip-text {
+  color: #b8f0e2;
+}
+
+.status-chip.down .chip-text {
+  color: #f7cfc9;
+}
+
+.status-chip .chip-count {
+  font-size: 11px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.status-chip .chip-count::before {
+  content: "· ";
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+/* KV / GW toggles — static LED (no pulse), short labels that never truncate */
+.led-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 9px 0 8px;
+  border: 0;
+  border-radius: var(--r-control);
+  background: var(--material-chrome);
+  color: var(--text-2);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  transition:
+    background var(--dur-press) var(--ease-out),
+    color var(--dur-press) var(--ease-out);
+}
+
+.led-toggle:hover:not(:disabled) {
+  background: var(--material-raised);
+  color: var(--text);
+}
+
+.led-toggle:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.led-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.led-toggle .led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px currentColor;
+}
+
+.led-toggle.on {
+  color: var(--ok);
+}
+
+.led-toggle.on .led {
+  background: var(--ok);
+  box-shadow: none;
+}
+
+.led-toggle.off .led {
+  opacity: 0.55;
+}
+
+.led-toggle.warn {
+  color: var(--warn);
+}
+
+.led-toggle.warn .led {
+  background: var(--warn);
+  box-shadow: none;
+  opacity: 0.9;
+}
+
+.led-toggle.ask {
+  color: var(--text);
+}
+
+.led-toggle.ask .led {
+  background: #d4a017;
+  box-shadow: none;
+  opacity: 1;
+}
+
+.led-toggle .led-label {
+  line-height: 1;
+}
+
+/* Four LEDs up the row stops being roomy: the floating bar (410 px) and the top
+   dock (280 px) have to hold the drag grip, the `edgePass` label *and* every
+   button, so each one gives back its padding, gap and letter-spacing. The side
+   dock is a column and has the height for it — it keeps the roomy sizing. */
+.led-toggles-bar.led-toggles-compact .led-toggle,
+.dock-top .led-toggles-dock.led-toggles-compact .led-toggle {
+  gap: 4px;
+  padding: 0 6px;
+  letter-spacing: 0.02em;
+}
+
+/* The side dock stacks the LEDs in a column inside a fixed 52 × 420 window, so
+   from four up they have to be shorter or the last one falls off the bottom. */
+.dock-left .led-toggles-dock.led-toggles-compact,
+.dock-right .led-toggles-dock.led-toggles-compact {
+  gap: 5px;
+}
+
+.dock-left .led-toggles-dock.led-toggles-compact .led-toggle,
+.dock-right .led-toggles-dock.led-toggles-compact .led-toggle {
+  min-height: 32px;
+  padding: 3px 2px 4px;
+  gap: 2px;
+}
+
+.grant-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid rgba(212, 160, 23, 0.35);
+  border-radius: var(--r-control);
+  background: rgba(212, 160, 23, 0.14);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.grant-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #d4a017;
+  flex: 0 0 auto;
+}
+
+.grant-chip-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}
+
+.grant-chip-dock {
+  width: 100%;
+  height: auto;
+  min-height: 36px;
+  flex-direction: column;
+  justify-content: center;
+  padding: 6px 4px;
+  gap: 2px;
+}
+
+.dock-top .grant-chip-dock {
+  width: auto;
+  height: 26px;
+  min-height: 0;
+  flex-direction: row;
+  padding: 0 8px;
+  gap: 5px;
+}
+
+/* =============================================================================
+   Controls
+   ========================================================================== */
+
+.icon-btn,
+.ghost,
+.primary,
+.pill-btn {
+  border: 0;
+  cursor: pointer;
+  color: var(--text);
+  font: inherit;
+  transition:
+    background var(--dur-press) var(--ease-out),
+    color var(--dur-press) var(--ease-out),
+    box-shadow var(--dur-press) var(--ease-out);
+}
+
+.icon-btn:focus-visible,
+.ghost:focus-visible,
+.primary:focus-visible,
+.pill-btn:focus-visible,
+.tabs button:focus-visible,
+.hit:focus-visible,
+.dock-tab:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.icon-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-control);
+  background: var(--material-chrome);
+  border: 1px solid var(--hairline);
+  display: grid;
+  place-items: center;
+  line-height: 1;
+}
+
+.icon-btn:hover {
+  background: var(--material-raised);
+}
+
+.icon-btn.qring-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-btn.qring-btn .qring-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  box-shadow: inset 0 0 0 2px transparent;
+  transition: background var(--dur-press) var(--ease-out), border-color var(--dur-press) var(--ease-out),
+    color var(--dur-press) var(--ease-out);
+}
+
+.icon-btn.qring-btn.on {
+  color: var(--ok);
+}
+
+.icon-btn.qring-btn.on .qring-dot {
+  background: var(--ok);
+  border-color: var(--ok);
+}
+
+.icon-btn.qring-btn.off {
+  color: var(--text-3);
+}
+
+.icon-btn.qring-btn.off .qring-dot {
+  background: transparent;
+}
+
+.icon-btn.qring-btn.missing {
+  color: var(--warn);
+}
+
+.icon-btn.qring-btn:disabled {
+  opacity: 0.55;
+}
+
+.pill-btn {
+  height: 28px;
+  padding: 0 11px;
+  border-radius: var(--r-pill);
+  background: var(--material-chrome);
+  border: 1px solid var(--hairline);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pill-btn.ok {
+  background: rgba(88, 201, 165, 0.16);
+  color: #bdf2e4;
+  border-color: rgba(88, 201, 165, 0.34);
+}
+
+.pill-btn.warn {
+  background: rgba(224, 176, 114, 0.18);
+  color: #f4dcb4;
+  border-color: rgba(224, 176, 114, 0.34);
+}
+
+.pill-btn:hover {
+  filter: brightness(1.09);
+}
+
+.icon-btn:disabled,
+.primary:disabled,
+.hit:disabled,
+.pill-btn:disabled,
+.ghost:disabled {
+  opacity: 0.42;
+  cursor: default;
+  filter: none;
+}
+
+/* =============================================================================
+   Drawer / tabs
+   ========================================================================== */
+
+.drawer {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  opacity: 0;
+  transform: translateY(-4px);
+  pointer-events: none;
+  transition: opacity 160ms var(--ease-out), transform 200ms var(--ease-out);
+}
+
+.drawer.open {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* ---- MCP panel: the editable list of servers + their connection data ---- */
+
+.mcp .mcp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0;
+  min-height: 0;
+  overflow: auto;
+}
+
+.mcp-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-control);
+}
+
+.mcp-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* A dot, not a pill: this is a process state, and the row already says which
+   server it is. */
+.mcp-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid var(--text-2);
+}
+
+.mcp-dot.on {
+  background: var(--accent-soft);
+  border-color: var(--accent-soft);
+}
+
+.mcp-field {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 8px;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-control);
+}
+
+.mcp-auto {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.mcp-detail {
+  padding-left: 14px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+
+.mcp-url {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px 6px;
+  font-size: 11px;
+  color: var(--text-2);
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: var(--r-control);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The credential command's output: monospace, scrollable and selectable, because
+   the whole point is that the human copies out of it. */
+.mcp-msg {
+  margin: 8px 0 0;
+  padding: 8px;
+  max-height: 140px;
+  overflow: auto;
+  font-size: 11px;
+  white-space: pre-wrap;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-control);
+  user-select: text;
+}
+
+/* Las variables que el server recibe por entorno (leídas del vault al arrancar):
+   la fila declara dónde vive el valor y «Regenerar» lo acuña ahí mismo. */
+.mcp-env {
+  padding-left: 14px;
+}
+
+/* Clave y campo van cortos para que el path —lo único que se lee de verdad—
+   se quede con el resto de la línea. */
+.mcp-field-senv {
+  flex: 0 1 auto;
+  width: 132px;
+}
+
+/* El valor recién acuñado: se muestra una sola vez, en su propia caja, porque
+   el punto es copiarlo (y Rust no lo guarda en ningún lado que sobreviva). */
+.mcp-secret {
+  margin-top: 4px;
+  padding: 6px 8px;
+  border: 1px solid rgba(90, 198, 183, 0.34);
+  border-radius: var(--r-control);
+  background: var(--accent-soft);
+}
+
+.mcp-secret .mcp-url {
+  color: var(--text);
+  user-select: text;
+}
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 8px 8px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.tabs button {
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  padding: 6px 10px;
+  border-radius: var(--r-control);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  transition:
+    background var(--dur-press) var(--ease-out),
+    color var(--dur-press) var(--ease-out);
+}
+
+.tabs button:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.tabs button.active {
+  color: var(--text);
+  background: var(--accent-soft);
+}
+
+.tab-spacer {
+  flex: 1;
+}
+
+/* The strip scrolls instead of shrinking: a tab squeezed under the 460px
+   window is a bitten label, and the reindex ↻ beside it got cut too. The ↻
+   stays outside the scroll area, so it is always whole. */
+.tabs-strip {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabs-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.tabs > .icon-btn {
+  flex: 0 0 auto;
+}
+
+.tabs button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+  gap: 8px;
+}
+
+/* =============================================================================
+   Search (the widget's primary input — it gets the most care)
+   ========================================================================== */
+
+.search-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+}
+
+.search-glyph {
+  position: absolute;
+  left: 10px;
+  width: 14px;
+  height: 14px;
+  color: var(--text-3);
+  pointer-events: none;
+}
+
+.search,
+.form input,
+.form textarea {
+  width: 100%;
+  border: 1px solid var(--hairline);
+  background: var(--material-field);
+  color: var(--text);
+  border-radius: var(--r-field);
+  padding: 9px 11px;
+  outline: none;
+  font: inherit;
+  transition: border-color var(--dur-press) var(--ease-out), box-shadow var(--dur-press) var(--ease-out);
+}
+
+.search {
+  padding-left: 31px;
+  padding-right: 30px;
+}
+
+.search::placeholder,
+.form input::placeholder,
+.batch-val::placeholder {
+  color: var(--text-3);
+}
+
+.search:focus,
+.form input:focus,
+.form textarea:focus,
+.batch-key:focus,
+.batch-val:focus {
+  border-color: rgba(90, 198, 183, 0.5);
+  box-shadow: var(--ring);
+}
+
+.search-clear {
+  position: absolute;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-2);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  line-height: 1;
+  transition: background var(--dur-press) var(--ease-out);
+}
+
+.search-clear:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: var(--text);
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  color: var(--text-3);
+  font-size: 11px;
+  padding: 0 2px;
+}
+
+.dot {
+  opacity: 0.5;
+}
+
+/* =============================================================================
+   Results
+   ========================================================================== */
+
+.hit-li {
+  list-style: none;
+}
+
+.hit-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  border-radius: var(--r-control);
+}
+
+.hit-row.selected {
+  background: var(--accent-soft);
+}
+
+.hit-row .hit {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.hit-edit {
+  flex: 0 0 28px;
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  border-radius: var(--r-control);
+  font-size: 13px;
+}
+
+.hit-edit:hover {
+  color: var(--text);
+  background: var(--material-raised);
+}
+
+.hit-edit.hit-del:hover {
+  color: var(--danger);
+}
+
+/* ── notas del secreto ─────────────────────────────────────────────────────
+   Comentarios locales ligados a (namespace, path, key): el vault guarda valores
+   y no tiene dónde poner esto. `auto` = lo escribió edgePass al entregarlo. */
+.notes-badge {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.hit-notes {
+  padding: 6px 8px 8px;
+  border-top: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.hit-notes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 132px;
+  overflow-y: auto;
+}
+
+.hit-note {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-2);
+}
+
+.hit-note-kind {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  border-radius: var(--r-pill);
+  background: var(--material-raised);
+  color: var(--text-3);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.hit-note-kind.auto {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.hit-note-body {
+  flex: 1 1 auto;
+  color: var(--text);
+}
+
+.hit-note-when {
+  flex: 0 0 auto;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.hit-notes-add {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.hit-notes-add input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-control);
+  background: var(--material-raised);
+  color: var(--text);
+  font: inherit;
+}
+
+.hit-notes-add input:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.meta-link {
+  border: 0;
+  background: transparent;
+  color: var(--accent-strong);
+  cursor: pointer;
+  font: inherit;
+  font-size: inherit;
+  padding: 0;
+}
+
+.meta-link:hover {
+  text-decoration: underline;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.path-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.path-edit-meta {
+  display: grid;
+  grid-template-columns: 0.45fr 1fr;
+  gap: 8px;
+}
+
+.login-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 10px;
+}
+
+/* Credentials: search + add on one line, then the list of what matches. */
+.login-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.login-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid var(--hairline);
+  background: var(--material-field);
+  color: var(--text);
+  border-radius: var(--r-field);
+  padding: 8px 10px;
+  font: inherit;
+  outline: none;
+}
+
+.login-search:focus {
+  border-color: var(--accent);
+  box-shadow: var(--ring);
+}
+
+/* The expanded row (new credential, or editing one). */
+.login-row-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-control);
+  background: var(--material-raised);
+}
+
+.login-item-id {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.login-item-id strong {
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.login-meta {
+  font-size: 11px;
+  color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.login-user {
+  font-family: var(--font-mono);
+}
+
+.login-item-editing {
+  padding: 0;
+  background: transparent;
+}
+
+.login-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+
+.login-form input {
+  border: 1px solid var(--hairline);
+  background: var(--material-field);
+  color: var(--text);
+  border-radius: var(--r-field);
+  padding: 8px 10px;
+  font: inherit;
+  outline: none;
+}
+
+.login-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 160px;
+  overflow: auto;
+}
+
+.login-item-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--r-control);
+  background: var(--material-chrome);
+}
+
+.login-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.login-pass {
+  font-family: var(--font-mono);
+  letter-spacing: 0.08em;
+}
+
+.login-csv {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--hairline);
+}
+
+.hits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 0;
+  flex: 1;
+}
+
+.hit-li {
+  margin: 0;
+}
+
+.hit {
+  width: 100%;
+  text-align: left;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.025);
+  color: inherit;
+  border-radius: var(--r-field);
+  padding: 8px 11px;
+  cursor: pointer;
+  font: inherit;
+  transition:
+    background var(--dur-press) var(--ease-out),
+    border-color var(--dur-press) var(--ease-out);
+}
+
+.hit:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--hairline);
+}
+
+/* Keyboard cursor — same affordance as hover, so arrow keys and the pointer
+   point at the same thing. */
+.hit.selected {
+  background: var(--accent-soft);
+  border-color: rgba(90, 198, 183, 0.34);
+}
+
+.hit-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.hit-key {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  word-break: break-all;
+}
+
+.badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: #a8e6da;
+  background: var(--accent-soft);
+  border-radius: var(--r-pill);
+  padding: 2px 7px;
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.hit-sub {
+  display: flex;
+  gap: 8px;
+  margin-top: 3px;
+  color: var(--text-3);
+  font-size: 11px;
+  min-width: 0;
+}
+
+.ns {
+  flex: 0 0 auto;
+  color: #a9c7c2;
+}
+
+.path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty {
+  color: var(--text-3);
+  padding: 28px 12px;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* =============================================================================
+   Forms
+   ========================================================================== */
+
+.form {
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-2);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.form .check {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.form input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--accent);
+}
+
+.form textarea {
+  resize: vertical;
+  min-height: 72px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Header-toggle editor (Ajustes → Toggles del header). One card per LED: the
+   label + probe + order on top, the two (or three) sides under it, and the
+   catalog's own description as the hint — the UI owns no copy for these. */
+.form select {
+  width: 100%;
+  border: 1px solid var(--hairline);
+  background: var(--material-field);
+  color: var(--text);
+  border-radius: var(--r-field);
+  padding: 8px 9px;
+  outline: none;
+  font: inherit;
+  font-size: 11.5px;
+}
+
+.form select:focus {
+  border-color: rgba(90, 198, 183, 0.5);
+  box-shadow: var(--ring);
+}
+
+.toggle-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.toggle-row-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.toggle-row-label {
+  flex: 0 0 68px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.toggle-row-top select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.toggle-row-btn {
+  flex: 0 0 auto;
+  padding: 6px 7px;
+  line-height: 1;
+}
+
+.toggle-row-sides {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.toggle-row-sides label {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.group-title {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  margin: 0;
+}
+
+.settings-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* The quit affordance sits apart from the everyday actions: it is the one
+   button that removes the only handle on the app (no frame, no taskbar entry).
+   Two steps, and the second one only appears after the first. */
+.quit-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--hairline);
+}
+
+.quit-row .ghost.danger {
+  color: var(--danger);
+  border: 1px solid transparent;
+}
+
+.quit-row .ghost.danger:hover {
+  color: var(--danger);
+  background: rgba(236, 128, 117, 0.12);
+}
+
+.quit-row .ghost.armed {
+  border-color: rgba(236, 128, 117, 0.55);
+  background: rgba(236, 128, 117, 0.14);
+}
+
+.primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 650;
+  padding: 9px 13px;
+  border-radius: var(--r-field);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.primary:hover {
+  background: var(--accent-strong);
+}
+
+.ghost {
+  background: transparent;
+  color: var(--text-2);
+  padding: 8px 10px;
+  border-radius: var(--r-control);
+  font-weight: 600;
+}
+
+.ghost:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.hint {
+  color: var(--text-3);
+  font-size: 11.5px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.hint.warn {
+  color: #f0d4a4;
+}
+
+/* =============================================================================
+   Batch table
+   ========================================================================== */
+
+.body.batch {
+  overflow: hidden;
+  gap: 10px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.batch-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.meter-footer {
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.meter-actions {
+  align-items: center;
+  gap: 12px;
+}
+
+.meter-head-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.meter-json {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.meter-json-input {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 120px;
+  resize: none;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-control);
+  background: var(--material-chrome);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.45;
+  box-sizing: border-box;
+}
+
+.meter-json-input:focus {
+  outline: none;
+  box-shadow: var(--ring);
+  border-color: transparent;
+}
+
+.meter-json-hint {
+  margin: 0;
+  font-size: 10.5px;
+  color: var(--text-3);
+  letter-spacing: 0.01em;
+}
+
+.meter-save {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-soft);
+  color: var(--ok);
+  box-shadow: inset 0 0 0 1.5px rgba(88, 201, 165, 0.35);
+  transition:
+    background var(--dur-press) var(--ease-out),
+    box-shadow var(--dur-press) var(--ease-out),
+    color var(--dur-press) var(--ease-out);
+}
+
+.meter-save:hover:not(:disabled) {
+  background: rgba(88, 201, 165, 0.28);
+  box-shadow: inset 0 0 0 1.5px rgba(88, 201, 165, 0.55);
+}
+
+.meter-save:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.meter-save.busy .meter-save-ring {
+  stroke-dasharray: 28 60;
+  animation: meter-spin 0.9s linear infinite;
+}
+
+.meter-save.ok {
+  background: rgba(88, 201, 165, 0.38);
+  color: var(--ok);
+  box-shadow: inset 0 0 0 2px var(--ok);
+}
+
+.meter-save-svg {
+  width: 28px;
+  height: 28px;
+}
+
+.meter-save-ring {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  opacity: 0.85;
+}
+
+.meter-save-check {
+  stroke: currentColor;
+  stroke-width: 2.6;
+}
+
+.meter-save-refresh {
+  stroke: currentColor;
+  stroke-width: 2.4;
+}
+
+.meter-save.load {
+  color: var(--accent, #5ac8c8);
+  background: rgba(90, 200, 200, 0.14);
+  box-shadow: inset 0 0 0 1.5px rgba(90, 200, 200, 0.4);
+}
+
+@keyframes meter-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.meter-save.busy .meter-save-svg {
+  transform-origin: 50% 50%;
+}
+
+.batch-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.022em;
+}
+
+.batch-path {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-3);
+  font-family: var(--font-mono);
+  word-break: break-all;
+}
+
+.batch-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.batch-row {
+  display: grid;
+  /* key · value · ver/ocultar · copiar */
+  grid-template-columns: minmax(88px, 0.9fr) minmax(0, 1.4fr) auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.batch-row.head {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  font-weight: 600;
+  padding: 0 2px;
+}
+
+.batch-key,
+.batch-val {
+  border: 1px solid var(--hairline);
+  background: var(--material-field);
+  color: var(--text);
+  border-radius: var(--r-field);
+  padding: 9px 11px;
+  outline: none;
+  font: inherit;
+  width: 100%;
+  transition: border-color var(--dur-press) var(--ease-out), box-shadow var(--dur-press) var(--ease-out);
+}
+
+.batch-key {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.batch-val {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+/* Row actions: tiny, so the value column keeps the space. */
+.batch-act {
+  padding: 8px 6px;
+  min-width: 44px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  text-align: center;
+  line-height: 1;
+}
+
+.logins-table .logins-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.logins-table .logins-row code,
+.logins-table .logins-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+}
+
+.logins-table .logins-row .muted {
+  color: var(--text-3);
+}
+
+.body.logins code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+/* =============================================================================
+   Inline error
+   ========================================================================== */
+
+.error {
+  margin: 0 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: rgba(236, 128, 117, 0.12);
+  border: 1px solid rgba(236, 128, 117, 0.34);
+  color: #f7d3ce;
+  padding: 8px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 1.42;
+}
+
+.error::before {
+  content: "!";
+  flex: 0 0 auto;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: rgba(236, 128, 117, 0.8);
+  color: #2a0f0c;
+  font-size: 11px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  margin-top: 1px;
+}
+
+/* =============================================================================
+   Toast — a small material arriving, not a banner sliding in
+   ========================================================================== */
+
+.toast {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  border-radius: 13px;
+  background: rgba(20, 24, 29, 0.92);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid var(--hairline-strong);
+  box-shadow: var(--shadow-raised), inset 0 1px 0 var(--specular);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  overflow: hidden;
+}
+
+.toast::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+/* =============================================================================
+   Alert (OpenBao offline)
+   ========================================================================== */
+
+.openbao-prompt-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(8, 10, 13, 0.52);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.openbao-prompt {
+  width: 320px;
+  max-width: 100%;
+  padding: 20px;
+  border-radius: var(--r-card);
+  corner-shape: superellipse(1.4);
+  background: rgba(28, 32, 38, 0.94);
+  backdrop-filter: blur(30px) saturate(170%);
+  -webkit-backdrop-filter: blur(30px) saturate(170%);
+  border: 1px solid var(--hairline-strong);
+  box-shadow: var(--shadow-card), inset 0 1px 0 var(--specular);
+}
+
+.openbao-prompt-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  background: var(--accent-soft);
+  border: 1px solid rgba(90, 198, 183, 0.24);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+  color: var(--accent);
+}
+
+.openbao-prompt-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.openbao-prompt-text {
+  margin-bottom: 18px;
+}
+
+.openbao-prompt-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.022em;
+  color: var(--text);
+  margin-bottom: 5px;
+}
+
+.openbao-prompt-desc {
+  font-size: 12.5px;
+  color: var(--text-2);
+  line-height: 1.45;
+}
+
+.openbao-prompt-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.grant-prompt-overlay {
+  z-index: 11;
+}
+
+.grant-prompt-cmd {
+  margin-top: 8px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: rgba(8, 10, 13, 0.45);
+  border: 1px solid var(--hairline);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.grant-prompt-reason {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.4;
+}
+
+.grant-prompt-actions {
+  flex-wrap: wrap;
+}
+
+.grant-prompt-actions .openbao-prompt-btn {
+  flex: 1 1 30%;
+  min-width: 88px;
+  padding: 9px 10px;
+  font-size: 12px;
+}
+
+.openbao-prompt-btn {
+  flex: 1;
+  padding: 10px 14px;
+  border-radius: var(--r-field);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  font-family: inherit;
+  transition: background var(--dur-press) var(--ease-out), filter var(--dur-press) var(--ease-out);
+}
+
+.openbao-prompt-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
+}
+
+.openbao-prompt-btn.primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.openbao-prompt-btn.primary:hover {
+  background: var(--accent-strong);
+}
+
+.openbao-prompt-btn.ghost {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--hairline);
+  color: var(--text-2);
+}
+
+.openbao-prompt-btn.ghost:hover {
+  background: rgba(255, 255, 255, 0.11);
+  color: var(--text);
+}
+
+/* =============================================================================
+   Diagnóstico
+   ========================================================================== */
+
+.diag {
+  overflow: auto;
+  overscroll-behavior: contain;
+  gap: 10px;
+}
+
+.diag-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  background: var(--hairline);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.diag-row {
+  display: grid;
+  grid-template-columns: 118px 1fr;
+  gap: 10px;
+  padding: 7px 10px;
+  background: rgba(18, 21, 25, 0.6);
+  font-size: 11.5px;
+}
+
+.diag-row dt {
+  color: var(--text-3);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.diag-row dd {
+  margin: 0;
+  color: var(--text);
+  word-break: break-all;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.diag-log {
+  margin: 0;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--hairline);
+  background: rgba(0, 0, 0, 0.32);
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 168px;
+  overflow: auto;
+}
+
+/* =============================================================================
+   Avisos — the committee's notices (hook + watcher), their counter and list
+   -----------------------------------------------------------------------------
+   The counter is a badge on the mark: the only spot that is the same in the
+   three shapes (docked rail, collapsed pill, open header), and the only one that
+   costs zero layout — the rail and the pill are sized for the chrome they
+   already had. A counter that took room would resize the widget, and a widget
+   that grows when the committee writes is a widget that breathes, which this one
+   must not. It is decorative (`aria-hidden` + `pointer-events: none`), so it
+   never nests a button inside the brand/dock button: the count is announced in
+   those buttons' `title` and the list is the Avisos tab.
+   ========================================================================== */
+
+.notice-badge {
+  position: absolute;
+  top: -2px;
+  left: 16px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 9.5px;
+  font-weight: 750;
+  line-height: 15px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  /* The ring is the material's own colour: the badge rides the mark, and it has
+     to stay readable over both the icon and the glass. */
+  box-shadow: 0 0 0 2px rgba(16, 18, 22, 0.86);
+  pointer-events: none;
+}
+
+/* Side rail: the rail is only ~39 CSS px wide and the mark is centred in it, so
+   hanging the badge off the centre pushes it past the edge — it gets clipped.
+   Anchored to the right edge it stays whole, riding the mark's top corner. */
+.dock-left .dock-open .notice-badge,
+.dock-right .dock-open .notice-badge {
+  left: auto;
+  right: 0;
+  top: 0;
+}
+
+/* The count on the Avisos tab: the strip is where you look once the panel is
+   open, and a counter that only lives in the header is easy to walk past. */
+.tab-count {
+  margin-left: 5px;
+  padding: 1px 5px;
+  border-radius: var(--r-pill);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 9.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.notices-head {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.notice-total {
+  color: var(--text-3);
+  font-size: 11px;
+}
+
+.notice-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--hairline);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.notice-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px 7px 9px;
+  background: rgba(18, 21, 25, 0.6);
+}
+
+/* Unseen ones carry the accent bar; the rest stay readable but quiet. */
+.notice-row.new {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.notice-row.new .notice-name {
+  color: #ffffff;
+}
+
+.notice-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.notice-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.notice-kind {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border-radius: var(--r-pill);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* `board` is a message, `steering` is a note: same list, different weight. */
+.notice-kind.board {
+  background: rgba(224, 176, 114, 0.16);
+  color: var(--warn);
+}
+
+.notice-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.notice-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-3);
+  font-size: 10.5px;
+}
+
+.notice-empty {
+  padding: 10px;
+  background: rgba(18, 21, 25, 0.6);
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+
+/* =============================================================================
+   Scrollbars — overlay-thin, appear on hover like the platform's own
+   ========================================================================== */
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  background-clip: content-box;
+}
+
+/* =============================================================================
+   Accessibility — the three independent signals, each with its own answer
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --material: rgba(16, 18, 22, 0.98);
+    --material-dock: rgba(16, 18, 22, 0.99);
+    --blur: 0px;
+  }
+
+  .shell,
+  .toast,
+  .openbao-prompt {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --text: #ffffff;
+    --text-2: rgba(255, 255, 255, 0.86);
+    --text-3: rgba(255, 255, 255, 0.62);
+    --hairline: rgba(255, 255, 255, 0.34);
+    --hairline-strong: rgba(255, 255, 255, 0.5);
+    --material: rgba(6, 8, 10, 0.98);
+  }
+}

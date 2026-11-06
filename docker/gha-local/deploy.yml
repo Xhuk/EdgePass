@@ -1,0 +1,94 @@
+# Copia este archivo a `.github/workflows/deploy.yml` en el proyecto.
+#
+# El build NO vive acá: lo hace `scripts/build-and-deploy.ps1` en tu máquina (Docker
+# Desktop), que empuja la imagen a GHCR y dispara este workflow con el SHA ya construido.
+# Este job solo levanta el servicio con esa imagen: segundos, sin compilar nada.
+#
+# **Corre en el runner LOCAL** (labels `self-hosted, Linux, X64, local` — el contenedor
+# que vigila el LED `GW` de edgePass) **y despliega en esta misma máquina**: el runner
+# tiene el socket de Docker del host montado, así que `docker compose up -d` levanta el
+# stack donde vivís (WSL2 + Docker Desktop). Nada de SSH, nada de secretos de VPS.
+#
+# Si algún día querés que el mismo workflow despliegue en el VPS, es un `mode: ssh` más
+# (y ahí sí haría falta la llave y un PAT para el pull remoto). Hoy no está: el target es
+# esta máquina.
+name: Local Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Tag o SHA de la imagen a levantar (el que construyó build-and-deploy.ps1)"
+        required: true
+        default: "latest"
+      mode:
+        description: "Cómo se levanta el servicio"
+        required: true
+        default: "compose"
+        type: choice
+        options:
+          - compose # docker compose up -d con el compose del repo
+          - image # docker run -d --name <repo> con la imagen nueva
+          - command # un comando tuyo (deploy_command)
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy:
+    name: Levantar el stack local con la imagen nueva
+    runs-on: [self-hosted, Linux, X64, local]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Imagen lista
+        run: |
+          set -euo pipefail
+          IMAGE="ghcr.io/${{ github.repository }}:${{ inputs.image_tag }}"
+          # Lo normal: la imagen YA está en este daemon porque se construyó acá. Solo si
+          # no está (otra máquina, otro tag) hay que bajarla — y eso sí pide login si el
+          # paquete es privado: poné GH_TOKEN en el `secretEnv` de la fila del runner.
+          if docker image inspect "$IMAGE" >/dev/null 2>&1; then
+            echo "ya está local: $IMAGE"
+          else
+            if [ -n "${GH_TOKEN:-}" ]; then
+              echo "bajando $IMAGE (con GH_TOKEN)"
+              echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.repository_owner }}" --password-stdin
+            else
+              echo "bajando $IMAGE (sin credenciales: falla si el paquete es privado)"
+            fi
+            docker pull "$IMAGE"
+          fi
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Deploy
+        env:
+          MODE: ${{ inputs.mode }}
+          APP: ${{ github.event.repository.name }}
+        run: |
+          set -euo pipefail
+          case "$MODE" in
+            compose)
+              # El compose del repo, con la imagen ya construida (no compila nada acá).
+              # Ojo con los bind mounts relativos (`./data:/data`): se resuelven contra
+              # el contenedor del runner, no contra el host. Si tu compose los usa,
+              # pasá el proyecto como volumen en `ghaRunners[].mounts` y usá `command`.
+              export APP_VERSION="${IMAGE##*:}"
+              docker compose -f docker-compose.yml up -d --remove-orphans
+              docker compose -f docker-compose.yml ps
+              ;;
+            image)
+              docker rm -f "$APP" >/dev/null 2>&1 || true
+              docker run -d --name "$APP" --restart unless-stopped "$IMAGE"
+              docker ps --filter "name=$APP"
+              ;;
+            command)
+              if [ -z "${DEPLOY_COMMAND:-}" ]; then
+                echo "::error::mode=command necesita DEPLOY_COMMAND en el entorno del runner (secretEnv)"; exit 1
+              fi
+              IMAGE="$IMAGE" APP="$APP" bash -c "$DEPLOY_COMMAND"
+              ;;
+          esac
+          docker image prune -f >/dev/null
+          echo "--> desplegado: $IMAGE"

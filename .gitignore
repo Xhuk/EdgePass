@@ -1,0 +1,24 @@
+node_modules/
+dist/
+src-tauri/target/
+.DS_Store
+*.log
+.tgrep/
+.env
+.env.*
+
+.cursor/
+.reasonix/
+.commandcode/
+.vscode/
+*.log
+# Respaldos del vault: nunca al repo. Contienen todos los secretos en claro.
+backups/
+*.snap
+*.snapshot
+*.hcl.bak
+
+# Init file y tokens: nunca
+openbao-init.json
+*vault-token*
+!backups/README.md
