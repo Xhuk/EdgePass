@@ -10,11 +10,21 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 /// Rotate at this size, keeping one previous file.
-const MAX_LOG_BYTES: u64 = 512 * 1024;
+///
+/// The check used to run only when the file was opened, so a widget left
+/// running for days never rotated: one session produced a 14 MB file. The
+/// counter below rotates mid-session too, which is the case that actually
+/// happens — this widget is meant to stay up for weeks.
+const MAX_LOG_BYTES: u64 = 4 * 1024 * 1024;
 const PREV_FILE: &str = "edgepass.1.log";
+
+/// Bytes in the current file, so rotation does not need a `metadata` call per
+/// line. Seeded from the file's real size when it is opened.
+static WRITTEN: AtomicU64 = AtomicU64::new(0);
 
 static LOGGER: OnceLock<Mutex<Option<File>>> = OnceLock::new();
 
@@ -38,11 +48,16 @@ fn open_file() -> Option<File> {
         let _ = fs::create_dir_all(parent);
     }
     rotate_if_needed(&path);
-    OpenOptions::new()
+    let file = OpenOptions::new()
         .create(true)
         .append(true)
         .open(&path)
-        .ok()
+        .ok()?;
+    // Continue counting from what is already on disk, so a restart does not
+    // postpone the next rotation by another full file.
+    let size = file.metadata().map(|m| m.len()).unwrap_or(0);
+    WRITTEN.store(size, Ordering::Relaxed);
+    Some(file)
 }
 
 /// `edgepass.log` -> `edgepass.1.log`, dropping whatever was there.
@@ -70,9 +85,23 @@ pub fn line(level: &str, msg: &str) {
         Ok(g) => g,
         Err(poisoned) => poisoned.into_inner(),
     };
+    let mut must_rotate = false;
     if let Some(file) = guard.as_mut() {
-        let _ = file.write_all(entry.as_bytes());
+        if file.write_all(entry.as_bytes()).is_ok() {
+            let total = WRITTEN.fetch_add(entry.len() as u64, Ordering::Relaxed);
+            must_rotate = total + entry.len() as u64 >= MAX_LOG_BYTES;
+        }
         let _ = file.flush();
+    }
+    if must_rotate {
+        // Rotating under the same lock keeps it race-free: no other thread can
+        // be holding the file open while it is renamed.
+        let path = log_path();
+        let prev = path.with_file_name(PREV_FILE);
+        let _ = fs::remove_file(&prev);
+        let _ = fs::rename(&path, &prev);
+        *guard = OpenOptions::new().create(true).append(true).open(&path).ok();
+        WRITTEN.store(0, Ordering::Relaxed);
     }
     #[cfg(debug_assertions)]
     eprint!("{entry}");
@@ -126,4 +155,40 @@ pub fn tail(n: usize) -> String {
 /// Log-file path as a string, for the diagnostics report.
 pub fn log_path_string() -> String {
     log_path().display().to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn tmp_dir(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("edgepass-{tag}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("carpeta temporal");
+        dir
+    }
+
+    #[test]
+    fn rotation_moves_the_current_file_aside() {
+        let dir = tmp_dir("rot");
+        let path = dir.join("edgepass.log");
+        if fs::write(&path, vec![b'x'; (MAX_LOG_BYTES + 1) as usize]).is_err() {
+            return; // sin espacio en el temporal: no es asunto de este test
+        }
+        rotate_if_needed(&path);
+        assert!(!path.exists(), "el archivo actual debio moverse");
+        assert!(dir.join(PREV_FILE).exists(), "no quedo el archivo previo");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_small_file_is_left_alone() {
+        let dir = tmp_dir("rot-small");
+        let path = dir.join("edgepass.log");
+        fs::write(&path, b"hola\n").expect("archivo de prueba");
+        rotate_if_needed(&path);
+        assert!(path.exists(), "un archivo chico no se toca");
+        assert!(!dir.join(PREV_FILE).exists());
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

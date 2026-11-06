@@ -1331,6 +1331,22 @@ pub fn run() {
     // A second launch must not become a second widget: two widgets means two
     // guardians, two SQLite handles and a race over the vault's seal state.
     // Single instance without pulling in another plugin.
+    //
+    // The mutex is the authority and it has no race; `notify_existing` only adds
+    // the courtesy of surfacing the widget that is already running.
+    match ipc::claim_single_instance() {
+        Ok(true) => {}
+        Ok(false) => {
+            crate::log_warn!(
+                "edgePass ya está corriendo en esta sesión: este proceso se cierra para no competir por \\\\.\\pipe\\edgepass"
+            );
+            ipc::notify_existing();
+            return;
+        }
+        Err(e) => crate::log_warn!(
+            "no pude tomar el mutex de instancia única ({e}); sigo, y dos instancias podrían competir por el pipe"
+        ),
+    }
     if ipc::notify_existing() {
         crate::log_info!("ya hay una instancia corriendo: le paso el foco y salgo");
         return;

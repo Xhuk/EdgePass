@@ -207,6 +207,38 @@ fn next_run_id() -> String {
     format!("r{}-{}", now_secs(), n)
 }
 
+/// True when this process is the only widget in the session.
+///
+/// [`notify_existing`] asks the pipe, and that check has a race: two processes
+/// starting together both find no server, both proceed, and the loser ends up
+/// serving the pipe anyway. The consequence is not cosmetic — a client would
+/// talk to whichever instance accepted first, which after a restart can be the
+/// one that is about to die.
+///
+/// A named mutex closes the race: the kernel creates it once, the second
+/// process gets `ERROR_ALREADY_EXISTS`, and it is refused before it opens a
+/// pipe. `Local\` keeps it per logon session, so a second Windows user gets
+/// their own widget and their own vault — as it should be.
+#[cfg(windows)]
+pub fn claim_single_instance() -> Result<bool, String> {
+    use windows_sys::Win32::Foundation::{GetLastError, ERROR_ALREADY_EXISTS};
+    use windows_sys::Win32::System::Threading::CreateMutexW;
+
+    // The handle is never closed on purpose: the process must own the name for
+    // as long as it runs, and Windows releases it at exit.
+    let name: Vec<u16> = "Local\\edgePass-widget\0".encode_utf16().collect();
+    let handle = unsafe { CreateMutexW(std::ptr::null(), 0, name.as_ptr()) };
+    if handle.is_null() {
+        return Err(format!("CreateMutexW: error {}", unsafe { GetLastError() }));
+    }
+    Ok(unsafe { GetLastError() } != ERROR_ALREADY_EXISTS)
+}
+
+#[cfg(not(windows))]
+pub fn claim_single_instance() -> Result<bool, String> {
+    Ok(true)
+}
+
 /// True when another edgePass already owns the pipe.
 ///
 /// Called *before* Tauri boots. A second launch should surface the widget that
@@ -257,6 +289,11 @@ fn create_pipe_instance(
 pub fn spawn(state: Arc<AppState>, app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         use crate::pipe_acl::UserOnly;
+        // `first_pipe_instance(true)` can only succeed once per pipe name, and
+        // it belongs to the first iteration only: after a client connects, that
+        // session's instance is still alive, so asking again would fail and
+        // read like a catastrophe in a log where it is routine.
+        let mut first = true;
         loop {
             // The descriptor is built and consumed inside this block, on
             // purpose: it owns raw pointers, so holding it across the `await`
@@ -266,14 +303,20 @@ pub fn spawn(state: Arc<AppState>, app: AppHandle) {
             // `UserOnly::new` logs the reason itself when it cannot build one.
             let created = {
                 let mut security = UserOnly::new();
-                match create_pipe_instance(PIPE_NAME, true, security.as_mut()) {
+                let is_first = first;
+                first = false;
+                match create_pipe_instance(PIPE_NAME, is_first, security.as_mut()) {
                     Ok(s) => Ok(s),
-                    Err(e) => {
-                        crate::log_warn!(
-                            "ipc: no pude ser el dueño del pipe ({e}); sigo sin exclusividad"
+                    Err(e) if is_first => {
+                        // The mutex already refused a second widget, so this is
+                        // a leftover handle from a process that is going away.
+                        // Say what it means, at the level it deserves.
+                        crate::log_info!(
+                            "ipc: el primer nombre del pipe ya existe ({e}); sigo como instancia adicional de sesión"
                         );
                         create_pipe_instance(PIPE_NAME, false, security.as_mut())
                     }
+                    Err(_) => create_pipe_instance(PIPE_NAME, false, security.as_mut()),
                 }
             };
             let mut server = match created {
@@ -340,7 +383,14 @@ async fn session(
 async fn dispatch(req: Value, state: Arc<AppState>, app: &AppHandle) -> Value {
     let op = req.get("op").and_then(Value::as_str).unwrap_or_default();
     match op {
-        "ping" => json!({ "ok": true, "pong": true }),
+        // The version travels with the ping so an operator can prove *which*
+        // binary is serving, not just that something answered. `pong` alone
+        // proves nothing after an upgrade.
+        "ping" => json!({
+            "ok": true,
+            "pong": true,
+            "version": env!("CARGO_PKG_VERSION"),
+        }),
         "focus" => focus(app),
         // Governance: may Q-ring RUN. Read (no `enabled`) or set (`"enabled": bool`).
         // Separate from the on/off quick action, which only starts/stops the gateway process.

@@ -1,5 +1,5 @@
 {
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Desktop console for a local OpenBao vault: secrets to processes, never to chat or logs.",
   "homepage": "https://github.com/Xhuk/EdgePass",
   "license": "MIT",
@@ -10,8 +10,8 @@
   ],
   "architecture": {
     "64bit": {
-      "url": "https://github.com/Xhuk/EdgePass/releases/download/v0.3.2/edgepass.exe",
-      "hash": "5f2a6d6f868484d03dd7f3ff9c113ade253541e05afb43ca341b90b710237b9f"
+      "url": "https://github.com/Xhuk/EdgePass/releases/download/v0.3.3/edgepass.exe",
+      "hash": "dfc5171f93af33852e0cb75bdfc8a6712b54cf59fe83e75c753611f5381b88aa"
     }
   },
   "bin": "edgepass.exe",
