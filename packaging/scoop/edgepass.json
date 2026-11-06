@@ -1,0 +1,29 @@
+{
+  "version": "0.3.0",
+  "description": "Desktop console for a local OpenBao vault: secrets to processes, never to chat or logs.",
+  "homepage": "https://github.com/Xhuk/EdgePass",
+  "license": "MIT",
+  "notes": [
+    "OpenBao 2.x is a prerequisite: install it, initialize it and unseal it.",
+    "edgePass talks only to a vault on loopback.",
+    "The binary is self-signed, so SmartScreen may warn about the publisher."
+  ],
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/Xhuk/EdgePass/releases/download/v0.3.0/edgepass.exe",
+      "hash": "820319436d3799c7bfb7b66f747081b463a08ec2ddcb9efaff136076f540371b"
+    }
+  },
+  "bin": "edgepass.exe",
+  "shortcuts": [["edgepass.exe", "edgePass"]],
+  "checkver": {
+    "github": "https://github.com/Xhuk/EdgePass"
+  },
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/Xhuk/EdgePass/releases/download/v$version/edgepass.exe"
+      }
+    }
+  }
+}
