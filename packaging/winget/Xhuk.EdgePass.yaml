@@ -1,37 +1,13 @@
-# Singleton manifest for winget-pkgs.
-# Submit as manifests/x/Xhuk/EdgePass/0.3.1/Xhuk.EdgePass.yaml
+# Version manifest for winget-pkgs.
+# Submit the three files of this folder as
+# manifests/x/Xhuk/EdgePass/0.3.1/ in microsoft/winget-pkgs.
 # Regenerate after every release: the URL and the SHA256 change.
+#
+# The catalog rejects a singleton manifest ("Manifest type not supported"),
+# so the package is split into version, locale and installer. See
+# docs/WINGET-SUBMISSION.md.
 PackageIdentifier: Xhuk.EdgePass
 PackageVersion: 0.3.1
-PackageLocale: en-US
-Publisher: Xhuk
-PublisherUrl: https://github.com/Xhuk
-PublisherSupportUrl: https://github.com/Xhuk/EdgePass/issues
-PackageName: edgePass
-PackageUrl: https://github.com/Xhuk/EdgePass
-License: MIT
-LicenseUrl: https://github.com/Xhuk/EdgePass/blob/main/LICENSE
-Copyright: Copyright (c) 2026 Xhuk
-ShortDescription: Desktop console for a local OpenBao vault.
-Description: A desktop widget that administers a local OpenBao vault and hands secrets to child processes by environment, never to a chat, a log, a file or a command line. OpenBao is a prerequisite. The app talks only to a vault on loopback.
-Moniker: edgepass
-Tags:
-  - secrets
-  - openbao
-  - vault
-  - credentials
-  - tauri
-  - security
-ReleaseNotesUrl: https://github.com/Xhuk/EdgePass/releases/tag/v0.3.1
-ManifestType: singleton
+DefaultLocale: en-US
+ManifestType: version
 ManifestVersion: 1.6.0
-ReleaseDate: 2026-11-06
-Installers:
-  - Architecture: x64
-    InstallerType: nullsoft
-    InstallerUrl: https://github.com/Xhuk/EdgePass/releases/download/v0.3.1/edgePass_0.3.1_x64-setup.exe
-    InstallerSha256: 34FB1955C8D0B4ED86F777EB4EA65DF1C272C77D63BDCCAF6599C9E1ACD6744E
-    Scope: user
-    InstallerSwitches:
-      Silent: /S
-      SilentWithProgress: /S

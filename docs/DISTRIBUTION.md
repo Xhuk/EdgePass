@@ -48,14 +48,25 @@ hand: copy it from `Get-FileHash`.
 ## winget
 
 winget uses the NSIS installer, and it goes into the central catalog
-`microsoft/winget-pkgs`. The manifest lives in `packaging/winget/Xhuk.EdgePass.yaml`
-and is a singleton, so it is one file instead of three.
+`microsoft/winget-pkgs`. The manifest is **three files**, not one: the catalog
+rejects a singleton with `Manifest type not supported`. They live in
+`packaging/winget/` and travel together:
+
+| File | `ManifestType` |
+|---|---|
+| `Xhuk.EdgePass.yaml` | `version` |
+| `Xhuk.EdgePass.locale.en-US.yaml` | `defaultLocale` |
+| `Xhuk.EdgePass.installer.yaml` | `installer` |
 
 ### Validate
 
 ```powershell
-winget validate --manifest packaging\winget\Xhuk.EdgePass.yaml
+winget validate --manifest packaging\winget
 ```
+
+A pass here is **not** proof that the PR will pass: `winget validate` accepts a
+singleton and answers "succeeded", while the catalog does not. The only real
+proof is the check on the pull request. See `docs/WINGET-SUBMISSION.md`.
 
 ### Submit
 
@@ -104,6 +115,10 @@ people but validates every submission.
 3. Sign the setup and the portable exe.
 4. Upload both to the release.
 5. Copy the two SHA256 values.
-6. Update `packaging/scoop/edgepass.json` (version, hash) and
-   `packaging/winget/Xhuk.EdgePass.yaml` (version, url, sha, date).
-7. Push the bucket, submit the winget manifest.
+6. Update `packaging/scoop/edgepass.json` (version, hash) and the three files in
+   `packaging/winget/` (version, url, sha, date).
+7. Push the bucket, submit the winget manifests.
+
+The winget pull request needs a signed Contributor License Agreement, once, from
+the account that opens it. The bot asks and the account answers
+`@microsoft-github-policy-service agree`. Without that the PR cannot merge.
