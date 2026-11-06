@@ -1203,7 +1203,7 @@ export default function App() {
             namespace: "",
             path: "",
             keys: [""],
-            title: "Batch · nuevo secreto",
+            title: "Meter · nuevo secreto",
           });
           return;
         }
@@ -2193,6 +2193,51 @@ export default function App() {
     }
   }
 
+  /** How a suggested passphrase is shaped. Kept in the window only: it is a
+   *  preference, not a secret, and it is not written to config.json. */
+  const [passOpts, setPassOpts] = useState({
+    words: 6,
+    separator: "-",
+    capitalize: false,
+    digits: false,
+    symbol: false,
+    compatible: false,
+  });
+  /** What the last suggestion was worth, shown next to the controls. */
+  const [passNote, setPassNote] = useState("");
+
+  /** «✦» on a row: a Diceware phrase built inside the widget.
+   *
+   *  The value is born in Rust and lands in the row like a typed one. It does
+   *  not travel over the local pipe and it is not logged, so no agent ever sees
+   *  it — only this window does, the same way it already shows a secret read
+   *  from the vault. */
+  async function onSuggestPassphrase(idx: number) {
+    try {
+      const made = await invoke<{
+        value: string;
+        entropyBits: number;
+        words: number;
+        advice: string | null;
+      }>("make_passphrase", { options: passOpts });
+      const next = [...batchRows];
+      next[idx] = { ...next[idx]!, value: made.value };
+      setBatchRows(next);
+      // A value the person asked for is shown, not masked: they need to read it.
+      setMaskedRows((prev) => {
+        const s = new Set(prev);
+        s.delete(idx);
+        return s;
+      });
+      const bits = made.entropyBits.toFixed(1).replace(".", ",");
+      setPassNote(
+        `${bits} bits · ${made.words} ${t("palabras")}${made.advice ? " · " + made.advice : ""}`,
+      );
+    } catch (e) {
+      setError(String(e instanceof Error ? e.message : e));
+    }
+  }
+
   /** Copy one Meter row: the value is already in the widget, so this is the
    *  clipboard, not a vault read. */
   async function onCopyRow(row: BatchRow) {
@@ -3112,7 +3157,7 @@ export default function App() {
                   >
                     <div className="batch-head">
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div className="batch-title">{ingest.title || "Batch · nuevo secreto"}</div>
+                        <div className="batch-title">{ingest.title || "Meter · nuevo secreto"}</div>
                         <div className="path-edit-meta" style={{ marginTop: 6 }}>
                           <input
                             className="batch-key"
@@ -3350,6 +3395,15 @@ export default function App() {
                               >
                                 ⧉
                               </button>
+                              <button
+                                type="button"
+                                className="ghost batch-act"
+                                onClick={() => void onSuggestPassphrase(idx)}
+                                title={t("Sugerir contraseña")}
+                                aria-label={`${t("Sugerir contraseña")} para ${row.key.trim() || "la variable"}`}
+                              >
+                                ✦
+                              </button>
                             </motion.div>
                           );
                         })}
@@ -3432,6 +3486,71 @@ export default function App() {
                           checked={batchReplaceAll}
                           onChange={(e) => setBatchReplaceAll(e.target.checked)}
                         />{t("Reemplazar path")}</label>
+                      <span
+                        className="meter-pass"
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 6,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <select
+                          value={passOpts.words}
+                          onChange={(e) =>
+                            setPassOpts({ ...passOpts, words: Number(e.target.value) })
+                          }
+                          title={t("palabras")}
+                          aria-label={t("palabras")}
+                        >
+                          {[4, 5, 6, 7, 8].map((n) => (
+                            <option key={n} value={n}>
+                              {n} {t("palabras")}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          value={passOpts.separator}
+                          onChange={(e) => setPassOpts({ ...passOpts, separator: e.target.value })}
+                          title={t("separador")}
+                          aria-label={t("separador")}
+                        >
+                          <option value="-">-</option>
+                          <option value="_">_</option>
+                          <option value=".">.</option>
+                          <option value=" ">{t("espacio")}</option>
+                          <option value="">{t("sin separador")}</option>
+                        </select>
+                        <label className="check">
+                          <input
+                            type="checkbox"
+                            checked={passOpts.capitalize}
+                            onChange={(e) =>
+                              setPassOpts({ ...passOpts, capitalize: e.target.checked })
+                            }
+                          />{t("Mayúsculas")}</label>
+                        <label className="check">
+                          <input
+                            type="checkbox"
+                            checked={passOpts.digits}
+                            onChange={(e) => setPassOpts({ ...passOpts, digits: e.target.checked })}
+                          />{t("Dígitos")}</label>
+                        <label className="check">
+                          <input
+                            type="checkbox"
+                            checked={passOpts.symbol}
+                            onChange={(e) => setPassOpts({ ...passOpts, symbol: e.target.checked })}
+                          />{t("Símbolo")}</label>
+                        <label className="check">
+                          <input
+                            type="checkbox"
+                            checked={passOpts.compatible}
+                            onChange={(e) =>
+                              setPassOpts({ ...passOpts, compatible: e.target.checked })
+                            }
+                          />{t("Solo letras y números")}</label>
+                        {passNote && <span className="hint">{passNote}</span>}
+                      </span>
                       <button
                         type="button"
                         className="ghost"

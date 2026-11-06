@@ -225,36 +225,10 @@ pub fn generate_token(bytes: usize) -> Result<String, String> {
     Ok(buf.iter().map(|b| format!("{b:02x}")).collect())
 }
 
-#[cfg(unix)]
+/// Delegates to [`crate::rand`], the single source of randomness in the app, so
+/// a token and a passphrase can never disagree about where the entropy came from.
 fn os_random(buf: &mut [u8]) -> Result<(), String> {
-    use std::io::Read;
-    let mut f = std::fs::File::open("/dev/urandom").map_err(|e| format!("/dev/urandom: {e}"))?;
-    f.read_exact(buf).map_err(|e| format!("/dev/urandom: {e}"))
-}
-
-#[cfg(windows)]
-fn os_random(buf: &mut [u8]) -> Result<(), String> {
-    use windows_sys::Win32::Security::Cryptography::{
-        BCryptGenRandom, BCRYPT_USE_SYSTEM_PREFERRED_RNG,
-    };
-    let status = unsafe {
-        BCryptGenRandom(
-            std::ptr::null_mut(),
-            buf.as_mut_ptr(),
-            buf.len() as u32,
-            BCRYPT_USE_SYSTEM_PREFERRED_RNG,
-        )
-    };
-    if status < 0 {
-        return Err(format!("BCryptGenRandom falló (NTSTATUS {status:#x})"));
-    }
-    Ok(())
-}
-
-#[cfg(not(any(unix, windows)))]
-fn os_random(buf: &mut [u8]) -> Result<(), String> {
-    let _ = buf;
-    Err("sin fuente de entropía en esta plataforma".to_string())
+    crate::rand::fill(buf)
 }
 
 /// Reads a list's `secretEnv` entries from the vault.

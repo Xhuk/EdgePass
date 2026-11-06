@@ -2084,8 +2084,8 @@ html.is-morphing .dock-tab {
 
 .batch-row {
   display: grid;
-  /* key · value · ver/ocultar · copiar */
-  grid-template-columns: minmax(88px, 0.9fr) minmax(0, 1.4fr) auto auto;
+  /* key · value · ver/ocultar · copiar · sugerir */
+  grid-template-columns: minmax(88px, 0.9fr) minmax(0, 1.4fr) auto auto auto;
   gap: 8px;
   align-items: center;
 }

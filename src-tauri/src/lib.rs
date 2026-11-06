@@ -29,11 +29,13 @@ mod mcp;
 mod net;
 mod notices;
 mod openbao;
+mod passphrase;
 #[cfg(windows)]
 mod pipe_acl;
 mod placement;
 mod pointer;
 mod qring;
+mod rand;
 mod skills;
 mod store;
 mod toggles;
@@ -336,6 +338,25 @@ async fn mcp_mint_token(
         .map_err(|e| format!("{label}: {namespace}/{path}: {e}"))?;
     crate::log_info!("mcp: token nuevo para {label} en {namespace}/{path} campo {field}");
     Ok(value)
+}
+
+/// Builds a Diceware passphrase inside the widget.
+///
+/// This is the «sugerir» button of the Meter tab. The value is created here and
+/// shown in the row the person asked to fill. It is written nowhere else: it
+/// does not travel over the local pipe, it is not logged, and it does not reach
+/// the clipboard until the person copies it.
+#[tauri::command]
+fn make_passphrase(options: passphrase::Options) -> Result<passphrase::Made, String> {
+    let made = passphrase::make(&options)?;
+    // Only the shape is recorded. The value stays out of the log.
+    crate::log_info!(
+        "passphrase: {} palabras, {:.1} bits, {} caracteres",
+        made.words,
+        made.entropy_bits,
+        made.length
+    );
+    Ok(made)
 }
 
 /// Runs the row's `credential_command` and returns what it printed, for copying
@@ -1463,6 +1484,7 @@ pub fn run() {
             mcp_control,
             mcp_mint_token,
             mcp_credential_command,
+            make_passphrase,
             unseal_vault,
             seal_vault,
             load_token_from_init,

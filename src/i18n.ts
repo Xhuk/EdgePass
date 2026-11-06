@@ -30,7 +30,7 @@ type TabWords = {
 const LABELS: Record<Lang, TabWords> = {
   en: {
     secrets: "Secrets",
-    batch: "Batch",
+    batch: "Meter",
     credentials: "Credentials",
     mcp: "MCP",
     config: "Config",
@@ -39,7 +39,7 @@ const LABELS: Record<Lang, TabWords> = {
   },
   es: {
     secrets: "Secretos",
-    batch: "Batch",
+    batch: "Meter",
     credentials: "Credenciales",
     mcp: "MCP",
     config: "Ajustes",
@@ -120,6 +120,17 @@ const EN: Record<string, string> = {
   Usuario: "User",
   Valor: "Value",
   "Cada botón del header es una fila: qué": "Each header button is a row: what",
+
+  // Passphrase generator (Meter)
+  "Sugerir contraseña": "Suggest password",
+  palabras: "words",
+  separador: "separator",
+  espacio: "space",
+  "sin separador": "no separator",
+  Mayúsculas: "Capitalize",
+  "Dígitos": "Digits",
+  "Símbolo": "Symbol",
+  "Solo letras y números": "Letters and digits only",
 
   // Visible attributes
   "¿por qué se pidió? ¿para qué sirve?": "why was it requested? what is it for?",
