@@ -22,3 +22,7 @@ backups/
 openbao-init.json
 *vault-token*
 !backups/README.md
+# Certificados de firma: nunca al repo
+*.pfx
+*.p12
+codesign/
