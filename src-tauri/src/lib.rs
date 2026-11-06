@@ -359,6 +359,37 @@ fn make_passphrase(options: passphrase::Options) -> Result<passphrase::Made, Str
     Ok(made)
 }
 
+/// The stored passphrase style, so the window can render the settings it
+/// actually has instead of guessing.
+#[tauri::command]
+fn passphrase_config() -> Result<passphrase::PassphraseConfig, String> {
+    Ok(load_config()?.passphrase)
+}
+
+/// Saves the style and marks it configured.
+///
+/// `configured` is set here, not taken from the caller: the only way to reach
+/// this command is a person choosing the style, which is exactly the event the
+/// flag records. That keeps the first-run question from ever being asked twice.
+#[tauri::command]
+fn save_passphrase_config(
+    settings: passphrase::PassphraseConfig,
+) -> Result<passphrase::PassphraseConfig, String> {
+    let mut cfg = load_config()?;
+    cfg.passphrase = passphrase::PassphraseConfig {
+        configured: true,
+        ..settings
+    };
+    save_config(&cfg)?;
+    crate::log_info!(
+        "passphrase: estilo guardado ({} palabras, separador {:?}, compatible={})",
+        cfg.passphrase.words,
+        cfg.passphrase.separator,
+        cfg.passphrase.compatible
+    );
+    Ok(cfg.passphrase)
+}
+
 /// Runs the row's `credential_command` and returns what it printed, for copying
 /// into the client. Only the server can mint a valid client id, so the widget
 /// runs the command the row declares instead of inventing one.
@@ -721,6 +752,9 @@ fn save_settings(
         // the tunnel, and this points at the binary that runs it.
         cloudflared_exe: prev.cloudflared_exe,
         gha_watch: prev.gha_watch,
+        // The passphrase style has its own command (`save_passphrase_config`):
+        // a Guardar in Ajustes must not reset it to the defaults.
+        passphrase: prev.passphrase,
         config_version: config::CONFIG_VERSION,
     };
     if cfg.mount.is_empty() {
@@ -1501,6 +1535,8 @@ pub fn run() {
             mcp_mint_token,
             mcp_credential_command,
             make_passphrase,
+            passphrase_config,
+            save_passphrase_config,
             unseal_vault,
             seal_vault,
             load_token_from_init,

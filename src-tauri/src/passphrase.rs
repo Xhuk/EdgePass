@@ -362,3 +362,51 @@ mod tests {
         assert!(made.advice.is_some(), "tres palabras deberian avisar");
     }
 }
+
+/// The style a person picked, as it lives in `config.json`.
+///
+/// [`Options`] is what a request carries; this is what the file remembers. The
+/// two stay separate so a stored default cannot be confused with an explicit
+/// request, and so `configured` has somewhere to live.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PassphraseConfig {
+    pub words: usize,
+    pub separator: String,
+    pub capitalize: bool,
+    pub digits: bool,
+    pub symbol: bool,
+    pub compatible: bool,
+    /// False until a person picks the style once. The widget asks the first
+    /// time and never again; the defaults above are only a starting point.
+    #[serde(default)]
+    pub configured: bool,
+}
+
+impl Default for PassphraseConfig {
+    fn default() -> Self {
+        let o = Options::default();
+        Self {
+            words: o.words,
+            separator: o.separator,
+            capitalize: false,
+            digits: false,
+            symbol: false,
+            compatible: false,
+            configured: false,
+        }
+    }
+}
+
+impl From<&PassphraseConfig> for Options {
+    fn from(c: &PassphraseConfig) -> Self {
+        Self {
+            words: c.words,
+            separator: c.separator.clone(),
+            capitalize: c.capitalize,
+            digits: c.digits,
+            symbol: c.symbol,
+            compatible: c.compatible,
+        }
+    }
+}

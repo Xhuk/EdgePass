@@ -1539,6 +1539,10 @@ export default function App() {
       default:
         setPanel("list");
     }
+    // The section wins. Expansion runs a measurement chain that can set the
+    // panel on its way out; landing on the start after the person clicked a
+    // section loses the click. This is the last word, after every loader.
+    if (name !== "batch" || ingest) setPanel(name);
   }
 
   /**
@@ -2205,6 +2209,43 @@ export default function App() {
   });
   /** What the last suggestion was worth, shown next to the controls. */
   const [passNote, setPassNote] = useState("");
+  /** False until a person picks the style once. Read from config.json. */
+  const [passConfigured, setPassConfigured] = useState(true);
+  /** Row waiting for the first-run style question, or null. */
+  const [passFirstRun, setPassFirstRun] = useState<number | null>(null);
+  /** Row whose star is pulsing right now. Generating is instant, so the form is
+   *  a pulse and a flash — not the save button's ring, which means "wait". */
+  const [pulseRow, setPulseRow] = useState<number | null>(null);
+
+  /** Loads the stored style so the settings panel shows what is really saved. */
+  useEffect(() => {
+    let alive = true;
+    void invoke<{
+      words: number;
+      separator: string;
+      capitalize: boolean;
+      digits: boolean;
+      symbol: boolean;
+      compatible: boolean;
+      configured: boolean;
+    }>("passphrase_config")
+      .then((c) => {
+        if (!alive) return;
+        setPassOpts({
+          words: c.words,
+          separator: c.separator,
+          capitalize: c.capitalize,
+          digits: c.digits,
+          symbol: c.symbol,
+          compatible: c.compatible,
+        });
+        setPassConfigured(c.configured);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   /** «✦» on a row: a Diceware phrase built inside the widget.
    *
@@ -2213,6 +2254,20 @@ export default function App() {
    *  it — only this window does, the same way it already shows a secret read
    *  from the vault. */
   async function onSuggestPassphrase(idx: number) {
+    // The first suggestion asks for the style first, once. Rust marks it as
+    // configured when it is saved, so this question never appears twice.
+    if (!passConfigured) {
+      setPassFirstRun(idx);
+      return;
+    }
+    await generateInto(idx);
+  }
+
+  /** The generation itself, split out so the first-run step can call it once the
+   *  style has been saved. */
+  async function generateInto(idx: number) {
+    setPulseRow(idx);
+    window.setTimeout(() => setPulseRow((cur) => (cur === idx ? null : cur)), 520);
     try {
       const made = await invoke<{
         value: string;
@@ -2233,6 +2288,20 @@ export default function App() {
       setPassNote(
         `${bits} bits · ${made.words} ${t("palabras")}${made.advice ? " · " + made.advice : ""}`,
       );
+    } catch (e) {
+      setError(String(e instanceof Error ? e.message : e));
+    }
+  }
+
+  /** Saves the passphrase style. `configured` is set by Rust, not here: the only
+   *  way to reach that command is a person choosing, which is what it records. */
+  async function onSavePassphrase() {
+    try {
+      await invoke("save_passphrase_config", {
+        settings: { ...passOpts, configured: true },
+      });
+      setPassConfigured(true);
+      setToast(t("Estilo de contraseñas guardado"));
     } catch (e) {
       setError(String(e instanceof Error ? e.message : e));
     }
@@ -3395,15 +3464,26 @@ export default function App() {
                               >
                                 ⧉
                               </button>
-                              <button
+                              <motion.button
                                 type="button"
                                 className="ghost batch-act"
+                                whileTap={tap}
+                                animate={
+                                  pulseRow === idx
+                                    ? { scale: [1, 1.32, 1], color: ["inherit", "#8fd6ff", "inherit"] }
+                                    : { scale: 1 }
+                                }
+                                transition={
+                                  pulseRow === idx
+                                    ? { duration: 0.5, times: [0, 0.35, 1] }
+                                    : spring.content
+                                }
                                 onClick={() => void onSuggestPassphrase(idx)}
                                 title={t("Sugerir contraseña")}
                                 aria-label={`${t("Sugerir contraseña")} para ${row.key.trim() || "la variable"}`}
                               >
                                 ✦
-                              </button>
+                              </motion.button>
                             </motion.div>
                           );
                         })}
@@ -3486,71 +3566,7 @@ export default function App() {
                           checked={batchReplaceAll}
                           onChange={(e) => setBatchReplaceAll(e.target.checked)}
                         />{t("Reemplazar path")}</label>
-                      <span
-                        className="meter-pass"
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 6,
-                          flexWrap: "wrap",
-                        }}
-                      >
-                        <select
-                          value={passOpts.words}
-                          onChange={(e) =>
-                            setPassOpts({ ...passOpts, words: Number(e.target.value) })
-                          }
-                          title={t("palabras")}
-                          aria-label={t("palabras")}
-                        >
-                          {[4, 5, 6, 7, 8].map((n) => (
-                            <option key={n} value={n}>
-                              {n} {t("palabras")}
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          value={passOpts.separator}
-                          onChange={(e) => setPassOpts({ ...passOpts, separator: e.target.value })}
-                          title={t("separador")}
-                          aria-label={t("separador")}
-                        >
-                          <option value="-">-</option>
-                          <option value="_">_</option>
-                          <option value=".">.</option>
-                          <option value=" ">{t("espacio")}</option>
-                          <option value="">{t("sin separador")}</option>
-                        </select>
-                        <label className="check">
-                          <input
-                            type="checkbox"
-                            checked={passOpts.capitalize}
-                            onChange={(e) =>
-                              setPassOpts({ ...passOpts, capitalize: e.target.checked })
-                            }
-                          />{t("Mayúsculas")}</label>
-                        <label className="check">
-                          <input
-                            type="checkbox"
-                            checked={passOpts.digits}
-                            onChange={(e) => setPassOpts({ ...passOpts, digits: e.target.checked })}
-                          />{t("Dígitos")}</label>
-                        <label className="check">
-                          <input
-                            type="checkbox"
-                            checked={passOpts.symbol}
-                            onChange={(e) => setPassOpts({ ...passOpts, symbol: e.target.checked })}
-                          />{t("Símbolo")}</label>
-                        <label className="check">
-                          <input
-                            type="checkbox"
-                            checked={passOpts.compatible}
-                            onChange={(e) =>
-                              setPassOpts({ ...passOpts, compatible: e.target.checked })
-                            }
-                          />{t("Solo letras y números")}</label>
-                        {passNote && <span className="hint">{passNote}</span>}
-                      </span>
+                      
                       <button
                         type="button"
                         className="ghost"
@@ -3562,6 +3578,93 @@ export default function App() {
                         }}
                       >{t("Descartar")}</button>
                     </div>
+
+                    {passFirstRun !== null && (
+                      <div
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={t("Contraseñas sugeridas")}
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          background: "var(--material-strong, rgba(20,20,22,0.86))",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          padding: 18,
+                          zIndex: 40,
+                        }}
+                      >
+                        <div className="group" style={{ maxWidth: 380 }}>
+                          <p className="group-title">{t("Contraseñas sugeridas")}</p>
+                          <p className="hint">
+                            {t("Primera vez. Elegí cómo se arma la frase y queda guardado. Después se cambia en Ajustes.")}
+                          </p>
+                          <label>
+                            {t("Palabras")}
+                            <select
+                              value={passOpts.words}
+                              onChange={(e) =>
+                                setPassOpts({ ...passOpts, words: Number(e.target.value) })
+                              }
+                            >
+                              {[3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                                <option key={n} value={n}>{n}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            {t("Separador")}
+                            <select
+                              value={passOpts.separator}
+                              onChange={(e) =>
+                                setPassOpts({ ...passOpts, separator: e.target.value })
+                              }
+                            >
+                              <option value="-">-</option>
+                              <option value="_">_</option>
+                              <option value=".">.</option>
+                              <option value=" ">{t("espacio")}</option>
+                              <option value="">{t("sin separador")}</option>
+                            </select>
+                          </label>
+                          <label className="check">
+                            <input
+                              type="checkbox"
+                              checked={passOpts.compatible}
+                              onChange={(e) =>
+                                setPassOpts({ ...passOpts, compatible: e.target.checked })
+                              }
+                            />{t("Solo letras y números")}</label>
+                          <p className="hint">
+                            {(() => {
+                              const bits = passOpts.words * Math.log2(7411);
+                              return `${t("Fuerza aproximada")}: ${bits.toFixed(0)} bits`;
+                            })()}
+                          </p>
+                          <div className="settings-row">
+                            <motion.button
+                              type="button"
+                              className="primary"
+                              whileTap={tap}
+                              onClick={() => {
+                                void (async () => {
+                                  await onSavePassphrase();
+                                  const target = passFirstRun;
+                                  setPassFirstRun(null);
+                                  if (target !== null) await generateInto(target);
+                                })();
+                              }}
+                            >{t("Guardar y usar")}</motion.button>
+                            <button
+                              type="button"
+                              className="ghost"
+                              onClick={() => setPassFirstRun(null)}
+                            >{t("Cancelar")}</button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </motion.section>
                 )}
 
@@ -4291,6 +4394,83 @@ export default function App() {
                       </p>
                       <label className="check">
                         <input type="checkbox" checked={autoSync} onChange={(e) => setAutoSync(e.target.checked)} />{t("Reindexar al abrir")}</label>
+                    </div>
+
+                    <div className="group">
+                      <p className="group-title">{t("Contraseñas sugeridas")}</p>
+                      <p className="hint">
+                        {t("Cómo se arma la frase que sugiere el botón ✦ del Meter. Se pregunta una vez y se guarda.")}
+                      </p>
+                      <label>
+                        {t("Palabras")}
+                        <select
+                          value={passOpts.words}
+                          onChange={(e) =>
+                            setPassOpts({ ...passOpts, words: Number(e.target.value) })
+                          }
+                        >
+                          {[3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                            <option key={n} value={n}>{n}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        {t("Separador")}
+                        <select
+                          value={passOpts.separator}
+                          onChange={(e) => setPassOpts({ ...passOpts, separator: e.target.value })}
+                        >
+                          <option value="-">-</option>
+                          <option value="_">_</option>
+                          <option value=".">.</option>
+                          <option value=" ">{t("espacio")}</option>
+                          <option value="">{t("sin separador")}</option>
+                        </select>
+                      </label>
+                      <label className="check">
+                        <input
+                          type="checkbox"
+                          checked={passOpts.capitalize}
+                          onChange={(e) => setPassOpts({ ...passOpts, capitalize: e.target.checked })}
+                        />{t("Mayúsculas")}</label>
+                      <label className="check">
+                        <input
+                          type="checkbox"
+                          checked={passOpts.digits}
+                          onChange={(e) => setPassOpts({ ...passOpts, digits: e.target.checked })}
+                        />{t("Dígitos")}</label>
+                      <label className="check">
+                        <input
+                          type="checkbox"
+                          checked={passOpts.symbol}
+                          disabled={passOpts.compatible}
+                          onChange={(e) => setPassOpts({ ...passOpts, symbol: e.target.checked })}
+                        />{t("Símbolo")}</label>
+                      <label className="check">
+                        <input
+                          type="checkbox"
+                          checked={passOpts.compatible}
+                          onChange={(e) => setPassOpts({ ...passOpts, compatible: e.target.checked })}
+                        />{t("Solo letras y números")}</label>
+                      <p className="hint">
+                        {(() => {
+                          // Must match `passphrase.rs`: 7.411 palabras y 14 símbolos.
+                          const bits =
+                            passOpts.words * Math.log2(7411) +
+                            (passOpts.digits ? 2 * Math.log2(10) : 0) +
+                            (!passOpts.compatible && passOpts.symbol ? Math.log2(14) : 0);
+                          return `${t("Fuerza aproximada")}: ${bits.toFixed(0)} bits`;
+                        })()}
+                        {passNote ? ` · ${passNote}` : ""}
+                      </p>
+                      <div className="settings-row">
+                        <motion.button
+                          type="button"
+                          className="primary"
+                          whileTap={tap}
+                          onClick={() => void onSavePassphrase()}
+                        >{passConfigured ? t("Guardar estilo") : t("Guardar y usar")}</motion.button>
+                      </div>
                     </div>
 
                     <div className="settings-row">

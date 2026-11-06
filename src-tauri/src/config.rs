@@ -145,6 +145,12 @@ pub struct AppConfig {
     /// change and gets migrated on first load.
     #[serde(default)]
     pub config_version: u32,
+    /// The style of the suggested passphrases (see `passphrase`).
+    ///
+    /// `configured` flips the first time a person picks it, so the widget asks
+    /// once and remembers. Until then the defaults apply but the UI still asks.
+    #[serde(default)]
+    pub passphrase: crate::passphrase::PassphraseConfig,
 }
 
 impl Default for AppConfig {
@@ -170,6 +176,7 @@ impl Default for AppConfig {
             daemoncurier_exe: String::new(),
             cloudflared_exe: String::new(),
             gha_watch: true,
+            passphrase: crate::passphrase::PassphraseConfig::default(),
             config_version: CONFIG_VERSION,
         }
     }
