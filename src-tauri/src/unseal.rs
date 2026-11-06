@@ -23,7 +23,7 @@ fn assert_local_addr(addr: &str) -> Result<(), String> {
     crate::net::assert_local(addr)
 }
 
-fn join_url(addr: &str, parts: &[&str]) -> String {
+fn join_url(addr: &str, parts: &[&str]) -> Result<String, String> {
     crate::net::join_url(addr, parts)
 }
 
@@ -64,7 +64,26 @@ pub async fn seal_status(cfg: &AppConfig) -> SealStatusDto {
         }
     };
 
-    let health_url = join_url(&cfg.bao_addr, &["v1", "sys", "health"]);
+    // Constant parts: the validator cannot reject them, but the gate is the
+    // same one every other call goes through, so refuse instead of panic.
+    let (health_url, status_url) = match (
+        join_url(&cfg.bao_addr, &["v1", "sys", "health"]),
+        join_url(&cfg.bao_addr, &["v1", "sys", "seal-status"]),
+    ) {
+        (Ok(health), Ok(status)) => (health, status),
+        (Err(e), _) | (_, Err(e)) => {
+            return SealStatusDto {
+                reachable: false,
+                health_code: 0,
+                initialized: false,
+                sealed: true,
+                progress: 0,
+                threshold: 0,
+                version: None,
+                message: e,
+            }
+        }
+    };
     let health_code = match http.get(&health_url).send().await {
         Ok(res) => res.status().as_u16(),
         Err(_) => {
@@ -81,7 +100,6 @@ pub async fn seal_status(cfg: &AppConfig) -> SealStatusDto {
         }
     };
 
-    let status_url = join_url(&cfg.bao_addr, &["v1", "sys", "seal-status"]);
     let body: serde_json::Value = match http.get(&status_url).send().await {
         Ok(res) => match res.json().await {
             Ok(v) => v,
@@ -195,7 +213,7 @@ pub async fn unseal(cfg: &AppConfig) -> Result<SealStatusDto, String> {
     };
 
     let http = http_client(cfg, 10)?;
-    let url = join_url(&cfg.bao_addr, &["v1", "sys", "unseal"]);
+    let url = join_url(&cfg.bao_addr, &["v1", "sys", "unseal"])?;
     for key in keys.iter().take(threshold) {
         let res = http
             .put(&url)
@@ -234,7 +252,10 @@ pub async fn unseal(cfg: &AppConfig) -> Result<SealStatusDto, String> {
 /// rather than hang the unseal (the write path also retries — see
 /// `openbao::post_kv`).
 async fn wait_until_active(cfg: &AppConfig, http: &reqwest::Client) {
-    let url = join_url(&cfg.bao_addr, &["v1", "sys", "health"]);
+    let url = match join_url(&cfg.bao_addr, &["v1", "sys", "health"]) {
+        Ok(url) => url,
+        Err(_) => return,
+    };
     for _ in 0..20 {
         let active = match http.get(&url).send().await {
             Ok(res) => match res.json::<serde_json::Value>().await {
@@ -267,7 +288,7 @@ pub async fn seal(cfg: &AppConfig, token: &str) -> Result<SealStatusDto, String>
     }
 
     let http = http_client(cfg, 10)?;
-    let url = join_url(&cfg.bao_addr, &["v1", "sys", "seal"]);
+    let url = join_url(&cfg.bao_addr, &["v1", "sys", "seal"])?;
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert(
         "X-Vault-Token",

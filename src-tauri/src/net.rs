@@ -7,7 +7,15 @@
 //! validates the address *before* building a client.
 //!
 //! The client also sets `.no_proxy()`: this is a loopback-only client, and a
-//! stray `HTTP_PROXY` in the environment must never see the vault token.
+//! stray `HTTP_PROXY` in the environment must never see the vault token. It
+//! also sets `.redirect(none)`: `X-Vault-Token` is a custom header, and a
+//! custom header is *not* stripped when a redirect changes host, so a hostile
+//! answer on 127.0.0.1:8200 could hand the token to a remote site.
+//!
+//! [`join_url`] validates every segment of the relative path. A caller that
+//! speaks the local pipe controls part of that path, and the URL parser folds
+//! `..` away, so `surfaces/demo-runtime/../saas-runtime` used to read a
+//! different path than the one it declared.
 
 use std::time::Duration;
 use url::{Host, Url};
@@ -39,29 +47,85 @@ pub fn assert_local(addr: &str) -> Result<(), String> {
     ))
 }
 
-/// Validated, proxy-free client for the configured OpenBao address.
+/// Validated, proxy-free, redirect-free client for the configured address.
 pub fn client(addr: &str, secs: u64) -> Result<reqwest::Client, String> {
     assert_local(addr)?;
     reqwest::Client::builder()
         .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
         .timeout(Duration::from_secs(secs))
         .build()
         .map_err(|e| e.to_string())
 }
 
+/// Decodes `%XX` escapes. Invalid escapes are kept as they are, so a literal
+/// `%` in a key name still passes through untouched.
+fn percent_decode(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            let hex = std::str::from_utf8(&bytes[i + 1..i + 3]).ok();
+            if let Some(v) = hex.and_then(|h| u8::from_str_radix(h, 16).ok()) {
+                out.push(v);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// Rejects one path segment that could escape its mount or bend the request.
+///
+/// The check runs on the percent-decoded form, so `%2e%2e` and `%2f` are
+/// caught the same way as `..` and `/`. A normal key name — dots, dashes,
+/// underscores, spaces, unicode — passes untouched.
+fn check_segment(seg: &str) -> Result<(), String> {
+    let decoded = percent_decode(seg);
+    let verboten = if decoded == "." || decoded == ".." {
+        Some("no puede ser '.' ni '..'")
+    } else if decoded.contains('/') || decoded.contains('\\') {
+        Some("no puede contener '/' ni '\\'")
+    } else if decoded.contains('?') || decoded.contains('#') {
+        Some("no puede contener '?' ni '#'")
+    } else if decoded.contains('\0') || seg.chars().any(char::is_control) {
+        Some("no puede contener caracteres de control")
+    } else {
+        None
+    };
+    match verboten {
+        None => Ok(()),
+        Some(why) => Err(format!(
+            "Ruta rechazada: el segmento '{seg}' {why}. edgePass no permite salir del path declarado."
+        )),
+    }
+}
+
 /// `join_url("http://127.0.0.1:8200/", &["v1", "kv", "data", rel])`.
 /// Empty segments are skipped so an empty relative path stays clean.
-pub fn join_url(addr: &str, parts: &[&str]) -> String {
+///
+/// Every `/`-separated piece is validated by [`check_segment`] before it lands
+/// in the URL, so a caller cannot read or write a path it did not declare.
+pub fn join_url(addr: &str, parts: &[&str]) -> Result<String, String> {
     let mut url = addr.trim_end_matches('/').to_string();
     for part in parts {
         let seg = part.trim_matches('/');
         if seg.is_empty() {
             continue;
         }
+        for piece in seg.split('/') {
+            if !piece.is_empty() {
+                check_segment(piece)?;
+            }
+        }
         url.push('/');
         url.push_str(seg);
     }
-    url
+    Ok(url)
 }
 
 #[cfg(test)]
@@ -82,12 +146,55 @@ mod tests {
     #[test]
     fn joins_without_double_slashes() {
         assert_eq!(
-            join_url("http://127.0.0.1:8200/", &["v1", "kv", "data", "a/b"]),
+            join_url("http://127.0.0.1:8200/", &["v1", "kv", "data", "a/b"]).unwrap(),
             "http://127.0.0.1:8200/v1/kv/data/a/b"
         );
         assert_eq!(
-            join_url("http://127.0.0.1:8200", &["v1", "kv", "data", ""]),
+            join_url("http://127.0.0.1:8200", &["v1", "kv", "data", ""]).unwrap(),
             "http://127.0.0.1:8200/v1/kv/data"
         );
+    }
+
+    #[test]
+    fn refuses_to_escape_the_declared_path() {
+        for bad in [
+            "surfaces/demo-runtime/../saas-runtime",
+            "../saas-runtime",
+            "a/../../sys/seal",
+            "./sys",
+            "%2e%2e/sys",
+            "%2E%2E/sys",
+            "a/%2f/b",
+            "a/\\..\\b",
+        ] {
+            assert!(
+                join_url("http://127.0.0.1:8200/", &["v1", "kv", "data", bad]).is_err(),
+                "debio rechazar {bad}"
+            );
+        }
+    }
+
+    #[test]
+    fn refuses_query_and_fragment_injection() {
+        for bad in ["sys/health?x=1", "a#b", "a/?#b"] {
+            assert!(join_url("http://127.0.0.1:8200/", &["v1", bad]).is_err());
+        }
+    }
+
+    #[test]
+    fn accepts_real_key_names() {
+        for good in [
+            "demo.vetgroom.com",
+            "personal/logins/xhuk",
+            "integrations/gatus/push-token",
+            "a-b_c d",
+            "100%",
+            "vetgroom/surfaces/demo-runtime",
+        ] {
+            assert!(
+                join_url("http://127.0.0.1:8200/", &["v1", "kv", "data", good]).is_ok(),
+                "debio aceptar {good}"
+            );
+        }
     }
 }

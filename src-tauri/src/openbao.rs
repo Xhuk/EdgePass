@@ -297,7 +297,7 @@ fn headers(token: &str, namespace: &str) -> Result<HeaderMap, BaoError> {
 /// Thin wrapper so call sites keep their `?` ergonomics; the shape lives in
 /// [`crate::net::join_url`].
 fn join_url(addr: &str, parts: &[&str]) -> Result<String, BaoError> {
-    Ok(crate::net::join_url(addr, parts))
+    crate::net::join_url(addr, parts).map_err(BaoError::Msg)
 }
 
 async fn list_keys(
