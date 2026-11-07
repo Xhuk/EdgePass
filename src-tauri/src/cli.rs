@@ -189,10 +189,12 @@ fn validate(file: Option<&Path>) -> Result<(), String> {
     println!("versión    {}", cfg.config_version);
 
     // The LEDs: ids against the published catalog, the count, the labels.
-    let toggles = crate::toggles::validate(cfg.toggles.clone())?;
+    let toggles = crate::toggles::validate(&cfg, cfg.toggles.clone())?;
     println!("LEDs       {}", toggles.len());
     for t in &toggles {
-        println!("  {:<4} {} → {} / {}", t.label, t.probe, t.on, t.off);
+        let on = if t.on.is_empty() { "solo mirar" } else { t.on.as_str() };
+        let off = if t.off.is_empty() { "solo mirar" } else { t.off.as_str() };
+        println!("  {:<4} {} → {} / {}", t.label, t.probe, on, off);
     }
 
     // The MCP list: a row without a command is the classic half-configured row.
@@ -346,7 +348,7 @@ fn doctor() -> Result<(), String> {
     }
 
     // 3. Los LEDs: que el vocabulario exista y que la config no pida un id raro.
-    match crate::toggles::validate(cfg.toggles.clone()) {
+    match crate::toggles::validate(&cfg, cfg.toggles.clone()) {
         Ok(list) => say(true, "LEDs", format!("{} en el header", list.len())),
         Err(e) => say(false, "LEDs", e),
     }

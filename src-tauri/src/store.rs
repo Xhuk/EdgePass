@@ -383,9 +383,6 @@ fn expand_aliases(tok: &str) -> Vec<String> {
         ("sb", &["supabase"]),
         ("pg", &["postgres", "postgresql"]),
         ("db", &["database", "postgres"]),
-        ("dk", &["dokploy"]),
-        ("dok", &["dokploy"]),
-        ("vg", &["vetgroom"]),
     ];
 
     for (short, fulls) in aliases {
@@ -517,9 +514,9 @@ mod tests {
     fn sample() -> Store {
         let s = store();
         s.replace_index(&refs(&[
-            ("buenaidee", "projects/cb2/infisical", "DATABASE_URL"),
-            ("buenaidee", "projects/cb2/infisical", "API_TOKEN"),
-            ("dokploy", "apps/vetgroom", "POSTGRES_PASSWORD"),
+            ("integraciones", "projects/cb2/infisical", "DATABASE_URL"),
+            ("integraciones", "projects/cb2/infisical", "API_TOKEN"),
+            ("infra", "apps/deploy", "POSTGRES_PASSWORD"),
         ]))
         .expect("index sample secrets");
         s
@@ -542,7 +539,7 @@ mod tests {
         assert_eq!(keys(&hits), vec!["API_TOKEN", "DATABASE_URL"]);
         // AND, not OR: adding a term that no row satisfies empties the result.
         assert!(s
-            .search("infisi cb2 vetgroom", 80)
+            .search("infisi cb2 deploy", 80)
             .expect("search")
             .is_empty());
         // A term that matches nothing at all is still empty, not an error.
@@ -563,14 +560,14 @@ mod tests {
     #[test]
     fn usage_survives_a_reindex_and_drives_the_default_order() {
         let s = sample();
-        s.record_use_ref("dokploy", "apps/vetgroom", "POSTGRES_PASSWORD")
+        s.record_use_ref("infra", "apps/deploy", "POSTGRES_PASSWORD")
             .expect("record use");
         // A sync rewrites the whole table; usage must be carried over by
         // (namespace, path, key) — rowids are reassigned, references are not.
         s.replace_index(&refs(&[
-            ("buenaidee", "projects/cb2/infisical", "DATABASE_URL"),
-            ("buenaidee", "projects/cb2/infisical", "API_TOKEN"),
-            ("dokploy", "apps/vetgroom", "POSTGRES_PASSWORD"),
+            ("integraciones", "projects/cb2/infisical", "DATABASE_URL"),
+            ("integraciones", "projects/cb2/infisical", "API_TOKEN"),
+            ("infra", "apps/deploy", "POSTGRES_PASSWORD"),
         ]))
         .expect("reindex");
 
@@ -583,14 +580,14 @@ mod tests {
     #[test]
     fn a_secret_that_disappeared_loses_its_usage_rather_than_leaking_it() {
         let s = sample();
-        s.record_use_ref("buenaidee", "projects/cb2/infisical", "API_TOKEN")
+        s.record_use_ref("integraciones", "projects/cb2/infisical", "API_TOKEN")
             .expect("record use");
-        s.replace_index(&refs(&[("dokploy", "apps/vetgroom", "POSTGRES_PASSWORD")]))
+        s.replace_index(&refs(&[("infra", "apps/deploy", "POSTGRES_PASSWORD")]))
             .expect("reindex without API_TOKEN");
 
         assert_eq!(s.count().unwrap(), 1);
         // Same key name, different path: usage must NOT follow the name.
-        s.replace_index(&refs(&[("buenaidee", "otro/path", "API_TOKEN")]))
+        s.replace_index(&refs(&[("integraciones", "otro/path", "API_TOKEN")]))
             .expect("reindex elsewhere");
         assert_eq!(s.search("", 80).unwrap()[0].use_count, 0);
     }

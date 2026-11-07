@@ -45,6 +45,18 @@ Update two fields in `bucket/edgepass.json`: `version` and the `hash` of the new
 `edgepass.exe`. `checkver` and `autoupdate` handle the URL. Do not type the hash by
 hand: copy it from `Get-FileHash`.
 
+The manifest also carries the thin parts of the lifecycle Scoop does not infer:
+
+- `notes` says to quit the widget before `scoop update` (Windows cannot replace a
+  running `.exe`), to install the WebView2 Runtime, and that config/index/logs
+  live in `%APPDATA%\edgePass` and survive an uninstall.
+- `post_uninstall` unregisters the `edgePass` logon task. Scoop never runs the
+  NSIS uninstaller, so without this the task outlives the binary.
+
+`packaging/scoop/edgepass.json` in this repo and `bucket/edgepass.json` in the
+bucket must stay byte-identical: the bucket is the published copy, the repo copy
+is what gets reviewed in a PR.
+
 ## winget
 
 winget uses the NSIS installer, and it goes into the central catalog
@@ -89,6 +101,59 @@ path, faster.
 
 Update `PackageVersion`, `InstallerUrl`, `InstallerSha256`, `ReleaseDate` and
 `ReleaseNotesUrl`. The SHA256 is the one of the **signed** setup file.
+
+## Release checklist (0.5.0 onward)
+
+> **Which repo.** The bucket downloads from `Xhuk/EdgePass` (public). The
+> workflows below only run where they are committed, so the release must be cut
+> in the public repo. A tag pushed to the private `edgepass-dev` remote produces
+> an asset the bucket cannot download.
+
+1. Bump `version` in `package.json`, `src-tauri/Cargo.toml` and
+   `src-tauri/tauri.conf.json` (and `src-tauri/Cargo.lock`, which `cargo`
+   rewrites). Put the same version at the top of `CHANGELOG.md`.
+2. Commit, tag `vX.Y.Z`, push the tag. `.github/workflows/release.yml` builds the
+   portable exe **and** the NSIS setup, writes `SHA256SUMS.txt` with both, signs
+   them when `WINDOWS_CERT_PFX_BASE64` and `WINDOWS_CERT_PASSWORD` exist, and
+   attaches all three files to the GitHub release. Without a certificate the
+   binaries are unsigned, which is what the manifest notes say.
+3. **Wait for the asset to answer** at
+   `https://github.com/Xhuk/EdgePass/releases/download/vX.Y.Z/edgepass.exe`.
+   Do not touch the bucket before that: a manifest pointing at a 404 breaks
+   `scoop update` for everyone.
+4. Hash the *published* files, not the local build:
+   `Get-FileHash edgepass.exe -Algorithm SHA256` for Scoop, and the same for
+   `edgePass_X.Y.Z_x64-setup.exe` for winget.
+5. Update `version`, `url` and `hash` in the bucket, then copy the same file into
+   `packaging/scoop/edgepass.json` (they must stay identical).
+6. On a second machine: `scoop update; scoop update edgepass`, launch it, and
+   check `{"op":"ping"}` returns the new version.
+7. winget: update `PackageVersion`, `InstallerUrl`, `InstallerSha256` (the
+   **setup**, not the portable exe) and `ReleaseDate` in `packaging/winget/`,
+   then `wingetcreate submit`.
+
+## Signing
+
+The 0.5.0 binary is Authenticode-signed with the project certificate
+`CN=Firma Instalador` (self-signed, code-signing EKU, valid until 2028-11-05),
+which lives in the Windows certificate store. Locally:
+
+```powershell
+& "C:\Program Files (x86)\Windows Kits\10\bin\10.0.22621.0\x64\signtool.exe" sign `
+  /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com `
+  /sha1 DFB044D2258C3A8361CBF68DC3B86A644898BCB3 /d "edgePass" `
+  src-tauri\target\release\edgepass.exe
+```
+
+For CI, the private key was exported from that store entry and the two secrets
+`WINDOWS_CERT_PFX_BASE64` and `WINDOWS_CERT_PASSWORD` are set in
+`Xhuk/EdgePass`; `release.yml` signs only when they exist.
+
+**Limitation, stated plainly:** a self-signed certificate is not trusted by
+anyone else's machine, so SmartScreen still warns until the root is installed.
+Removing that warning for every user requires an OV/EV code-signing certificate
+from a public CA. The signature still proves the binary was not modified after
+the build, and the timestamp keeps it valid past the certificate's expiry.
 
 ## What each one gives you
 

@@ -6,7 +6,11 @@
   "notes": [
     "OpenBao 2.x is a prerequisite: install it, initialize it and unseal it.",
     "edgePass talks only to a vault on loopback.",
-    "The binary is self-signed, so SmartScreen may warn about the publisher."
+    "Requires the WebView2 Runtime (Windows 11 ships it; Windows 10 needs the Evergreen Runtime).",
+    "Quit edgePass before 'scoop update edgepass': Windows cannot replace a running .exe.",
+    "The binary is self-signed, so SmartScreen may warn about the publisher.",
+    "Config lives in %APPDATA%\\edgePass; index, logs and placement live in %LOCALAPPDATA%\\edgePass. Uninstalling does not delete either.",
+    "If you enabled start-at-logon, Ajustes has the button that removes it; the uninstaller also removes the task."
   ],
   "architecture": {
     "64bit": {
@@ -16,6 +20,9 @@
   },
   "bin": "edgepass.exe",
   "shortcuts": [["edgepass.exe", "edgePass"]],
+  "post_uninstall": [
+    "powershell -NoProfile -Command \"cmdkey /delete:bao_token.edgepass | Out-Null; Unregister-ScheduledTask -TaskName 'edgePass' -Confirm:$false -ErrorAction SilentlyContinue; exit 0\""
+  ],
   "checkver": {
     "github": "https://github.com/Xhuk/EdgePass"
   },

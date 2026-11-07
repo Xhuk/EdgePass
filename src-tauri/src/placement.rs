@@ -55,7 +55,15 @@ impl Placement {
 }
 
 pub fn path() -> Result<PathBuf, String> {
-    Ok(crate::config::data_dir()?.join("placement.json"))
+    Ok(crate::config::local_data_dir()?.join("placement.json"))
+}
+
+/// Where <= 0.4.x kept it (Roaming). Read once and moved, so the old location
+/// stops being a second source of truth.
+fn legacy_path() -> Option<PathBuf> {
+    crate::config::data_dir()
+        .ok()
+        .map(|dir| dir.join("placement.json"))
 }
 
 /// `None` covers both "first run" and "unreadable file": neither is worth
@@ -68,7 +76,20 @@ pub fn load() -> Option<Placement> {
             return None;
         }
     };
-    let placement = load_from(&path)?;
+    let placement = load_from(&path).or_else(|| {
+        let old = legacy_path()?;
+        if old == path {
+            return None;
+        }
+        let placement = load_from(&old)?;
+        if fs::rename(&old, &path).is_err() {
+            // Different volume (or the file is briefly locked): copy instead of
+            // losing the spot.
+            let _ = fs::copy(&old, &path);
+            let _ = fs::remove_file(&old);
+        }
+        Some(placement)
+    })?;
     crate::log_info!(
         "arranco donde quedé: dock={:?} monitor='{}' centro=({:.3}, {:.3})",
         placement.dock,

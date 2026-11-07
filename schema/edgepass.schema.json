@@ -1,0 +1,218 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/xhuk/edgePass/schema/edgepass.schema.json",
+  "title": "edgePass config",
+  "description": "config.json / config.yaml as edgePass reads it. Everything here is data: the header LEDs (toggles[]), the owner's services (services[]) and the MCP servers (mcpServers[]) are edited from the widget, from a file, or over the pipe — never by changing the binary.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "$schema": { "type": "string" },
+    "baoAddr": {
+      "type": "string",
+      "description": "OpenBao / Vault address. Loopback only: edgePass refuses to talk to a remote vault.",
+      "default": "http://127.0.0.1:8200"
+    },
+    "mount": { "type": "string", "default": "kv" },
+    "namespaces": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [""],
+      "description": "Vault namespaces, in the order the panel lists them. \"\" = root."
+    },
+    "autoUnseal": { "type": "boolean", "default": true },
+    "autoSealIdleSecs": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 0,
+      "description": "Seal the vault after this many idle seconds. 0 = never (sealing cuts every client)."
+    },
+    "autoCollapseIdleSecs": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 10,
+      "description": "Collapse the expanded panel after this many seconds without the pointer. 0 = never."
+    },
+    "autoSync": { "type": "boolean", "default": true },
+    "autoLoadToken": { "type": "boolean", "default": true },
+    "initPath": {
+      "type": "string",
+      "default": "",
+      "description": "Path to the vault init file (unseal keys + token). Empty = not configured."
+    },
+    "qringPack": { "type": "string", "default": "", "description": "Q-ring pack directory. Empty = integration off." },
+    "qringHost": { "type": "string", "default": "" },
+    "qringGoverned": { "type": "boolean", "default": true },
+    "toggles": {
+      "type": "array",
+      "maxItems": 8,
+      "description": "The header LEDs, in order. Each one names a probe (how it reads state) and up to three actions. A fresh install ships only KV (OpenBao is a prerequisite).",
+      "items": { "$ref": "#/$defs/toggle" }
+    },
+    "services": {
+      "type": "array",
+      "maxItems": 24,
+      "description": "Owner-defined services. Each row publishes the probe svc.<id> and the actions svc.<id>.on / svc.<id>.off, so a toggle can watch it without the exe knowing about it.",
+      "items": { "$ref": "#/$defs/service" }
+    },
+    "mcpServers": {
+      "type": "array",
+      "description": "MCP servers edgePass starts, watches and restarts. Each row also publishes mcp.<id>; the aggregate is mcp.servers.",
+      "items": { "$ref": "#/$defs/mcpServer" }
+    },
+    "ghaRunners": { "type": "array", "items": { "type": "object" } },
+    "ghaDir": { "type": "string", "default": "" },
+    "dockerDesktopExe": { "type": "string", "default": "" },
+    "daemoncurierExe": { "type": "string", "default": "" },
+    "cloudflaredExe": { "type": "string", "default": "" },
+    "ghaWatch": { "type": "boolean", "default": true },
+    "configVersion": { "type": "integer", "minimum": 0 },
+    "passphrase": {
+      "type": "object",
+      "description": "The suggested-passphrase style. `randomChars` is fresh entropy per phrase; `installSalt` (below) only diversifies across machines.",
+      "properties": {
+        "words": { "type": "integer", "minimum": 3, "maximum": 12 },
+        "separator": { "type": "string" },
+        "capitalize": { "type": "boolean" },
+        "digits": { "type": "boolean" },
+        "symbol": { "type": "boolean" },
+        "randomChars": { "type": "integer", "minimum": 0, "maximum": 12 },
+        "compatible": { "type": "boolean" },
+        "configured": { "type": "boolean" }
+      }
+    },
+    "installSalt": {
+      "type": "string",
+      "description": "Per-installation hex salt mixed into the passphrase draw. Not a secret and not extra entropy: it only diversifies across machines cloned from the same snapshot. Generated on the first passphrase."
+    }
+  },
+  "$defs": {
+    "toggle": {
+      "type": "object",
+      "required": ["label", "probe"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable key (derived from the label when empty). What a click and {\"op\":\"toggle\"} send."
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4,
+          "description": "What the LED says (KV, GW, GOV…). Four characters is the pill's budget."
+        },
+        "probe": {
+          "type": "string",
+          "description": "Built-in probe (vault.seal, qring.process, mcp.servers…), a derived svc.<id>, or a derived mcp.<id>. Read the live list from {\"op\":\"toggles\"} → catalog.probes."
+        },
+        "on": {
+          "type": "string",
+          "description": "Action when the probe says off. Empty = this side does nothing (read-only light)."
+        },
+        "off": {
+          "type": "string",
+          "description": "Action when the probe says on. Empty = this side does nothing."
+        },
+        "alt": {
+          "type": ["string", "null"],
+          "description": "Optional third action for Ctrl / right click."
+        }
+      }
+    },
+    "service": {
+      "type": "object",
+      "required": ["id", "probe"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "description": "Stable key; slugged by the backend. The probe is svc.<id>." },
+        "label": { "type": "string", "description": "Short name for the panel. Defaults to the id." },
+        "name": { "type": "string", "description": "Longer description for the tooltip." },
+        "probe": {
+          "oneOf": [
+            { "$ref": "#/$defs/processProbe" },
+            { "$ref": "#/$defs/cmdProbe" }
+          ]
+        },
+        "actions": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "on": { "$ref": "#/$defs/serviceAction" },
+            "off": { "$ref": "#/$defs/serviceAction" }
+          }
+        }
+      }
+    },
+    "processProbe": {
+      "type": "object",
+      "required": ["kind", "image"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "process" },
+        "image": { "type": "string", "description": "Image to look for (mi-api.exe). Runs nothing." },
+        "match": {
+          "type": ["string", "null"],
+          "description": "Optional argument substring, to tell apart processes that share an interpreter."
+        }
+      }
+    },
+    "cmdProbe": {
+      "type": "object",
+      "required": ["kind", "cmd"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "cmd" },
+        "cmd": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "description": "Command to run. Exit code is the contract: 0 = on, 2 = off, 3 = warn. First stdout line = tooltip."
+        },
+        "cwd": { "type": "string", "description": "Working directory. Empty = inherit edgePass's." }
+      }
+    },
+    "serviceAction": {
+      "type": "object",
+      "required": ["cmd"],
+      "additionalProperties": false,
+      "properties": {
+        "cmd": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "cwd": { "type": "string" }
+      }
+    },
+    "mcpServer": {
+      "type": "object",
+      "required": ["id", "command"],
+      "additionalProperties": true,
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "command": { "type": "string" },
+        "args": { "type": "array", "items": { "type": "string" } },
+        "cwd": { "type": "string" },
+        "image": { "type": "string" },
+        "env": { "type": "array", "items": { "type": "object" } },
+        "secretEnv": {
+          "type": "array",
+          "description": "Credentials read from OpenBao at spawn time and put only in the child's environment.",
+          "items": {
+            "type": "object",
+            "required": ["key", "path", "field"],
+            "properties": {
+              "key": { "type": "string" },
+              "namespace": { "type": "string" },
+              "path": { "type": "string" },
+              "field": { "type": "string" }
+            }
+          }
+        },
+        "publicUrl": { "type": "string" },
+        "tunnel": { "type": "string" },
+        "path": { "type": "string" },
+        "clients": { "type": "array", "items": { "type": "string" } },
+        "credentialCommand": { "type": "string" },
+        "autostart": { "type": "boolean" }
+      }
+    }
+  }
+}

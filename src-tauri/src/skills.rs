@@ -1,11 +1,10 @@
 //! Puente con `skills-sync`: la biblioteca de skills de la máquina y sus enlaces.
 //!
 //! El programa que hace el trabajo es Python y vive fuera de este repo, en su propia
-//! carpeta (decisión del 2026-09-28): **`C:\proyectos\skills-sync\skills_sync.py`**.
 //! Acá sólo se lo invoca y se traduce su respuesta a un LED.
 //!
 //! Por qué fuera y no adentro de edgePass: sincroniza la biblioteca de *la máquina*
-//! (`~/.agents/skills` → los 50 agentes), no algo de este producto. Se usa igual desde
+//! (`~/.agents/skills` de cada agente), no algo de este producto. Se usa igual desde
 //! una terminal, desde un hook o desde edgePass. Contrato: `docs/TOGGLE-CONTRACT.md`.
 //!
 //! Cuidados que sí importan acá:
@@ -27,22 +26,21 @@ use serde::Serialize;
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-/// Ruta por defecto del sincronizador (su carpeta propia, fuera de este repo).
-const DEFAULT_SCRIPT: &str = r"C:\proyectos\skills-sync\skills_sync.py";
-
 /// Cuánto vale un `status` antes de pedir otro. El LED se sonda cada 5 s.
 const STATUS_TTL: Duration = Duration::from_secs(15);
 
-/// El script a invocar: `EDGEPASS_SKILLS_SYNC` gana (para probar otro checkout).
+/// El sincronizador vive donde el usuario lo diga: `EDGEPASS_SKILLS_SYNC` (para
+/// probar otro checkout) o nada — y "nada" es el LED ámbar con el cómo, no una
+/// ruta escondida en el binario.
 pub fn script_path() -> PathBuf {
     match std::env::var("EDGEPASS_SKILLS_SYNC") {
         Ok(p) if !p.trim().is_empty() => PathBuf::from(p.trim()),
-        _ => PathBuf::from(DEFAULT_SCRIPT),
+        _ => PathBuf::new(),
     }
 }
 
 fn script_ok(path: &std::path::Path) -> bool {
-    path.is_file()
+    !path.as_os_str().is_empty() && path.is_file()
 }
 
 /// Lo que el LED necesita: un puñado de números y, si algo falló, el motivo.
@@ -88,7 +86,10 @@ impl SkillsStatus {
 fn run_json(args: &[&str], timeout_secs: u64) -> Result<serde_json::Value, String> {
     let script = script_path();
     if !script_ok(&script) {
-        return Err(format!("no encontré el sincronizador en {}", script.display()));
+        return Err(match script.to_str().unwrap_or("") {
+            "" => "sincronizador no configurado (variable EDGEPASS_SKILLS_SYNC)".into(),
+            other => format!("no encontré el sincronizador en {other} (revisá EDGEPASS_SKILLS_SYNC)"),
+        });
     }
 
     let mut cmd = Command::new("python");
@@ -373,7 +374,8 @@ mod tests {
         std::env::set_var("EDGEPASS_SKILLS_SYNC", r"C:\otro\skills_sync.py");
         assert_eq!(script_path(), PathBuf::from(r"C:\otro\skills_sync.py"));
         std::env::remove_var("EDGEPASS_SKILLS_SYNC");
-        assert_eq!(script_path(), PathBuf::from(DEFAULT_SCRIPT));
+        // Sin variable no hay default: el binario no esconde una ruta de otra máquina.
+        assert!(script_path().as_os_str().is_empty());
     }
 
     #[test]
@@ -412,9 +414,11 @@ mod tests {
     #[test]
     fn status_now_habla_con_el_sincronizador_cuando_esta() {
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let default = std::path::Path::new(DEFAULT_SCRIPT);
-        if !default.is_file() {
-            eprintln!("sin sincronizador en {}: prueba saltada", default.display());
+        // Sin EDGEPASS_SKILLS_SYNC el script no está configurado: es el caso "sin
+        // la herramienta" de este test, y se salta.
+        let script = script_path();
+        if script.as_os_str().is_empty() || !script.is_file() {
+            eprintln!("sincronizador no configurado: prueba saltada");
             return;
         }
         match status_now() {

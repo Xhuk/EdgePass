@@ -24,8 +24,6 @@ use std::time::{Duration, Instant};
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-/// Where the runner's `Dockerfile` and compose live (the assets ship with the widget).
-const DEFAULT_DIR: &str = r"C:\proyectos\edgePass\docker\gha-local";
 const DEFAULT_IMAGE: &str = "gha-local:latest";
 const DEFAULT_LABELS: &str = "self-hosted,Linux,X64,local";
 /// Docker Desktop's own binary: what starts the engine when it is not answering.
@@ -75,8 +73,8 @@ pub struct GhaRunnerSpec {
     /// Extra `host:container[:ro]` mounts.
     ///
     /// The VPS SSH key is the case this exists for: the vault holds its *path*
-    /// (`VPS_SSH_KEY_PATH` in `dokploy/global`), and a path is machine config rather than
-    /// a secret value — the container just needs the file to `ssh`.
+    /// (`VPS_SSH_KEY_PATH` in another app's namespace), and a path is machine config rather than
+    /// a secret value - the container just needs the file to `ssh`.
     #[serde(default)]
     pub mounts: Vec<String>,
     /// Credentials read from OpenBao at spawn time (same shape the MCP list uses).
@@ -635,10 +633,17 @@ pub fn script_path(cfg: &crate::config::AppConfig) -> PathBuf {
 pub fn open_viewer(cfg: &crate::config::AppConfig, id: &str) -> Result<(), String> {
     let script = script_path(cfg);
     if !script.is_file() {
-        return Err(format!(
-            "no encuentro el visor del runner en {} (definí ghaDir o EDGEPASS_GHA_SCRIPT)",
-            script.display()
-        ));
+        let nobody_conf = cfg.gha_dir.trim().is_empty()
+            && std::env::var("EDGEPASS_GHA_DIR").map(|v| v.trim().is_empty()).unwrap_or(true)
+            && std::env::var("EDGEPASS_GHA_SCRIPT").map(|v| v.trim().is_empty()).unwrap_or(true);
+        return Err(if nobody_conf {
+            "el visor del runner no está configurado: definí ghaDir (config) o EDGEPASS_GHA_DIR".into()
+        } else {
+            format!(
+                "no encuentro el visor del runner en {} (definí ghaDir o EDGEPASS_GHA_SCRIPT)",
+                script.display()
+            )
+        });
     }
     let esc = |s: String| s.replace('\'', "''");
     let command = format!(
@@ -714,6 +719,10 @@ pub fn ensure(
         said.push(msg);
     }
     let dir = dir_path(cfg);
+    if dir.as_os_str().is_empty() || !dir.is_dir() {
+        // Sin la carpeta de assets no hay compose que llenar: el cómo, no la ruta de otra máquina.
+        return Err("ghaDir no está definido: apuntá al directorio con los assets del runner (ghaDir en la config o EDGEPASS_GHA_DIR)".into());
+    }
     for spec in specs {
         said.push(ensure_runner(spec, &dir, secrets)?);
     }
@@ -951,6 +960,9 @@ fn pick<'a>(
     }
 }
 
+/// The runner assets' dir is wherever the user points (`ghaDir` in config or
+/// `EDGEPASS_GHA_DIR`) or **nothing** — a fresh install has no runners, and the
+/// actions say exactly what is missing instead of baking this repo's layout in.
 fn dir_path(cfg: &crate::config::AppConfig) -> PathBuf {
     let raw = cfg.gha_dir.trim();
     if !raw.is_empty() {
@@ -962,7 +974,7 @@ fn dir_path(cfg: &crate::config::AppConfig) -> PathBuf {
             return PathBuf::from(e);
         }
     }
-    PathBuf::from(DEFAULT_DIR)
+    PathBuf::new()
 }
 
 fn desktop_exe(cfg: &crate::config::AppConfig) -> PathBuf {
@@ -1184,13 +1196,13 @@ mod tests {
         let mut s = spec();
         s.socket_mount = DEFAULT_SOCKET.into();
         s.mounts = vec![
-            r"C:\proyectos\secrets\vps_key:/keys/vps:ro".into(),
+            r"D:\llaves\vps:/keys/vps:ro".into(),
             "   ".into(),
         ];
         let args = run_args(&s, &[]);
         let joined = args.join(" ");
         assert!(
-            joined.contains(r"-v C:\proyectos\secrets\vps_key:/keys/vps:ro"),
+            joined.contains(r"-v D:\llaves\vps:/keys/vps:ro"),
             "{joined}"
         );
         assert!(!joined.contains(r#"-v ""#), "{joined}");
@@ -1408,11 +1420,11 @@ mod tests {
             finished: None,
             running_for_secs: Some(5),
         };
-        let live = vec![("vetgroom".to_string(), job.clone())];
+        let live = vec![("mi-app".to_string(), job.clone())];
 
         let first = new_jobs(&seen, &live);
         assert_eq!(first.len(), 1, "el primero se anuncia");
-        seen.insert("vetgroom".to_string(), job.started.clone());
+        seen.insert("mi-app".to_string(), job.started.clone());
         assert!(
             new_jobs(&seen, &live).is_empty(),
             "el mismo job no se repite"
@@ -1423,7 +1435,7 @@ mod tests {
             started: "2026-10-14 22:20:00Z".into(),
             ..job.clone()
         };
-        let live = vec![("vetgroom".to_string(), later)];
+        let live = vec![("mi-app".to_string(), later)];
         assert_eq!(new_jobs(&seen, &live).len(), 1);
 
         // Y un job ya terminado no abre nada.
@@ -1431,7 +1443,7 @@ mod tests {
             result: Some("Succeeded".into()),
             ..job
         };
-        let live = vec![("vetgroom".to_string(), done)];
+        let live = vec![("mi-app".to_string(), done)];
         assert!(new_jobs(&seen, &live).is_empty());
     }
 

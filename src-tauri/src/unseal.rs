@@ -163,6 +163,10 @@ pub async fn seal_status(cfg: &AppConfig) -> SealStatusDto {
 }
 
 fn read_unseal_keys(init_path: &str) -> Result<Vec<String>, String> {
+    if init_path.trim().is_empty() {
+        // Sin ruta no hay llaves: el mensaje dice el campo, no una ruta que no existe.
+        return Err("Init JSON no configurado en Ajustes → Vault".into());
+    }
     let path = PathBuf::from(init_path);
     if !path.exists() {
         return Err(format!("init file not found: {init_path}"));

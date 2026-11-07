@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    # `vars.CI_RUNNER` is a JSON array (e.g. ["self-hosted","Windows","X64"]).
+    # Set it when the hosted quota is gone; unset, this runs on windows-latest.
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '["windows-latest"]') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: cargo test
+        run: cargo test --manifest-path src-tauri/Cargo.toml

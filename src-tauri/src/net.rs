@@ -184,12 +184,12 @@ mod tests {
     #[test]
     fn accepts_real_key_names() {
         for good in [
-            "demo.vetgroom.com",
-            "personal/logins/xhuk",
-            "integrations/gatus/push-token",
+            "mi-api.example.com",
+            "personal/logins/developer",
+            "integrations/status/push-token",
             "a-b_c d",
             "100%",
-            "vetgroom/surfaces/demo-runtime",
+            "mi-app/surfaces/demo-runtime",
         ] {
             assert!(
                 join_url("http://127.0.0.1:8200/", &["v1", "kv", "data", good]).is_ok(),

@@ -73,7 +73,7 @@ pub struct Notices {
     /// The `.jsonl` exists on this machine. False means the two writer scripts
     /// are not installed, which is the normal state of a fresh public install:
     /// the panel then hides the tab instead of showing internal vocabulary
-    /// (comité, hook, watcher, board) to someone who has none of it.
+    /// (agent names, hook, watcher) to someone who has none of it.
     #[serde(default)]
     pub available: bool,
 }
@@ -222,7 +222,7 @@ mod tests {
 
     fn line(at: &str, name: &str) -> String {
         format!(
-            r#"{{"at":"{at}","kind":"steering","source":"watch","tool":"","root":"C:\\proyectos\\lotly","path":"C:\\proyectos\\lotly\\.reasonix\\steering\\{name}","name":"{name}","bytes":7}}"#
+            r#"{{"at":"{at}","kind":"steering","source":"watch","tool":"","root":"D:\\work\\demo-app","path":"D:\\work\\demo-app\\.notes\\steering\\{name}","name":"{name}","bytes":7}}"#
         )
     }
 

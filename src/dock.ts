@@ -61,6 +61,22 @@ export const SNAP_PX = 56;
 export const UNDOCK_PX = 96;
 
 export const FLOAT_COLLAPSED = { w: 410, h: 56 };
+/**
+ * Width of the collapsed floating pill for the LEDs it has to hold.
+ *
+ * 410 is the chrome (grip, brand, arrow) plus three LEDs. From a fourth on the
+ * row is compact but each pill still costs ~44 px, and the row never wraps —
+ * wrapping would change the height — so the window grows with it and shrinks
+ * back when a LED is removed. This is what makes "collapse to the LEDs present
+ * or grow for the eight" true without a fixed guess in the middle.
+ */
+export function floatCollapsedWidth(leds: number): number {
+  return FLOAT_COLLAPSED.w + Math.max(0, leds - 3) * 50;
+}
+
+export function floatCollapsedSize(leds: number): { w: number; h: number } {
+  return { w: floatCollapsedWidth(leds), h: FLOAT_COLLAPSED.h };
+}
 export const FLOAT_EXPANDED = { w: 460, h: 600 };
 /**
  * Floor for the side rail, **in logical window px** — not in CSS px, and those
@@ -77,6 +93,8 @@ export const DOCK_TOP = { w: 280, h: 44 };
 export const DOCK_ISLAND_W = 148;
 /** The size the side rail was last given, so snapped geometry stays in step. */
 let sideSize: { w: number; h: number } | null = null;
+/** Same for the top dock: it is a row, so it grows with the LEDs too. */
+let topSize: { w: number; h: number } | null = null;
 export const BATCH_BASE = { w: 560, h: 220 };
 export const BATCH_ROW_H = 44;
 /** Visible rows before pagination — window grows to fit these, not the full list. */
@@ -265,11 +283,33 @@ export async function sizeDockTo(
   needCssH: number,
   opts: { remember?: boolean } = {},
 ) {
-  if (edge === "top") return;
   const cur = await getWindowLogic();
   const vw = document.documentElement.clientWidth || 0;
   const vh = document.documentElement.clientHeight || 0;
-  if (vw <= 0 || vh <= 0) return;  // CSS px → logical window px, **as a delta**. The two are different units on
+  if (vw <= 0 || vh <= 0) return;
+  const k = (window.devicePixelRatio || 1) / (cur.scale || 1);
+  if (edge === "top") {
+    // The top dock is a row: it grows with the LEDs the same way the pill does,
+    // and the height is the dock's own (`DOCK_TOP.h`). Centred on the point it
+    // already occupies so a new LED opens the row symmetrically.
+    const wantW = Math.max(needCssW, DOCK_TOP.w) * k;
+    const w = Math.round(Math.min(wantW, cur.work.w - 8));
+    const h = Math.round(DOCK_TOP.h * k);
+    const center = cur.x + cur.w / 2;
+    const x = Math.round(
+      clamp(center - w / 2, cur.work.x, cur.work.x + cur.work.w - w),
+    );
+    const y = cur.work.y;
+    const clientW = vw * k;
+    const clientH = vh * k;
+    if (Math.abs(clientW - w) < 2 && Math.abs(clientH - h) < 2) return;
+    if (opts.remember !== false) topSize = { w, h };
+    traceUi(`dockTo top need=${Math.round(needCssW)} k=${k.toFixed(3)} → ${w}x${h}`);
+    await animateTo({ x, y, w, h });
+    return;
+  }
+
+  // CSS px → logical window px, **as a delta**. The two are different units on
   // this machine and neither is 1:1 with the other: the webview reports
   // `devicePixelRatio` 2 while the window is scaled by 1.5, so a rail laid out
   // for one unit and sized in the other came out clipped. A delta also cancels
@@ -282,7 +322,6 @@ export async function sizeDockTo(
   // rect como base sumaba el marco en cada ajuste: la ventana crecía un poco,
   // la verificación lo veía ancho, volvía a pedir… y el widget se redimensionaba
   // solo cada 5 s. `k` es la única constante que hace falta (dpr / escala).
-  const k = (window.devicePixelRatio || 1) / (cur.scale || 1);
   const wantW = Math.max(needCssW, DOCK_SIDE.w) * k;
   const wantH = needCssH * k;
   const w = Math.round(Math.min(Math.max(wantW, DOCK_SIDE.w), cur.work.w - 8));
@@ -330,8 +369,9 @@ export function placementFrom(
   work: Rect,
   dock: DockEdge | null,
   monitor: string,
+  floatW: number = FLOAT_COLLAPSED.w,
 ): Placement {
-  const size = dock ? dockSize(dock) : FLOAT_COLLAPSED;
+  const size = dock ? dockSize(dock) : { w: floatW, h: FLOAT_COLLAPSED.h };
   return {
     monitor,
     dock,
@@ -350,6 +390,7 @@ export function placementFrom(
  */
 export async function geometryFromPlacement(
   p: Placement,
+  floatW: number = FLOAT_COLLAPSED.w,
 ): Promise<{ dock: DockEdge | null; rect: Rect } | null> {
   const monitors = await availableMonitors().catch(() => [] as Monitor[]);
   const named = p.monitor ? monitors.find((m) => m.name === p.monitor) : undefined;
@@ -371,7 +412,7 @@ export async function geometryFromPlacement(
     return { dock, rect: { ...pos, ...size } };
   }
 
-  const w = Math.min(FLOAT_COLLAPSED.w, work.w);
+  const w = Math.min(floatW, work.w);
   const h = Math.min(FLOAT_COLLAPSED.h, work.h);
   const rect = {
     x: clamp(work.x + p.x * work.w - w / 2, work.x + 8, work.x + work.w - w - 8),
@@ -433,7 +474,7 @@ export function nearestEdge(
 }
 
 export function dockSize(edge: DockEdge): { w: number; h: number } {
-  if (edge === "top") return DOCK_TOP;
+  if (edge === "top") return topSize ?? DOCK_TOP;
   // What the rail was actually given last time — see `sizeDockTo`. Without this,
   // every snap/restore would put the width back to the floor and the labels
   // would be clipped again.

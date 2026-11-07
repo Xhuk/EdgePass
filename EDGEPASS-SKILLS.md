@@ -1,51 +1,56 @@
-# EdgePass - Funcionalidades para Skills
+# edgePass — capabilities for skills
 
-EdgePass es un widget de escritorio que gestiona secretos desde tu vault de OpenBao local. Las skills pueden interactuar con EdgePass para gestionar secretos de forma automatizada.
+edgePass is a desktop widget that administers secrets from your local OpenBao
+vault. Skills can talk to edgePass to manage secrets automatically.
 
-## Estado de la Ventana
+## Window states
 
-EdgePass tiene dos estados principales:
+edgePass has two main states:
 
-- **Colapsado (Dock)**: Pequeña pastilla en el borde de la pantalla con el logo y estado del vault
-- **Expandido**: Ventana completa con búsqueda, gestión y configuración
+- **Collapsed (dock)**: a small pill on the screen edge with the logo and the
+  vault status.
+- **Expanded**: the full window with search, management and settings.
 
-## Interfaz de Pipe (JSON)
+## Pipe interface (JSON)
 
-Las skills pueden enviar comandos a EdgePass mediante pipe JSON en stdout:
+Skills send JSON commands to edgePass over a named pipe:
 
 ```json
 {"op":"ingest-form","namespace":"buenaidee","path":"projects/cb2/infisical","keys":["DATABASE_URL","DB_USER","DB_PASSWORD","API_TOKEN"]}
 ```
 
-### Operaciones Disponibles
+### Available operations
 
-| Operación | Descripción | Parámetros |
+| Operation | Description | Parameters |
 |-----------|-------------|------------|
-| `ping` | Comprueba que edgePass está vivo | — |
-| `focus` | Trae la pastilla al frente (no expande) | — |
-| `status` | Estado del vault + hold | — |
-| `search` | Busca en el índice local: **solo nombres** (namespace, path, key), sin abrir el vault | `query?`, `limit?` (default 50, máx 200) |
-| `meter` | **Abre el tab Batch con los datos del secreto**: resuelve un path (o una `query` contra el índice) y el widget lee sus campos y los muestra para copiar (ojo por fila · ⧉ copiar todo). El llamante **nunca ve valores** | `query?` **o** `path` (+ `namespace?`, `title?`) |
-| `unseal` / `seal` | Abrir / cerrar el vault ahora | — |
-| `hold` | No auto-sellar durante N segundos | `secs?` (default 3600, máx 86400) |
-| `run` | Ejecuta un comando con los secretos **en el entorno del hijo** (scripts locales; sin popup) | `entries[]`, `cmd[]`, `cwd?`, `keys?`, `timeoutSecs?` (default 300, máx 3600) |
-| `request` | GW: pide un `run` con popup Allow once / 2h / Deny. Respuesta inmediata `pending`/`running`. **Nunca valores.** | `action=run`, `actor?`, `namespace`, `path` (o `entries[]`), `cmd[]`, `keys?`, `reason?`, `cwd?`, `detach?` |
-| `request-status` | Snapshot de un request (o lista si no hay `id`). Sin valores / stdout | `id?` |
-| `request-wait` | Espera hasta `timeoutSecs` (máx 60) a que salga de pending/running | `id`, `timeoutSecs?` |
-| `request-resolve` | Solo UI: `deny` / `allow-once` / `allow-2h` | `id`, `decision` |
-| `ingest-form` | Abre formulario batch para ingresar secretos | `namespace`, `path`, `keys[]`, `title?` |
-| `sync_index` | Reindexa el índice local ahora (equivale al `↻` de la UI) | — |
-| `toggles` | Los LEDs del header **como datos**: leer la lista + el vocabulario (`catalog`), o reescribirla (validada: ids del catálogo, máx 5) | — · `set[]` |
-| `toggle` | Dispara un LED (lo mismo que un click del header): la acción la resuelve Rust desde `config.json`, tú solo nombras el LED | `id`, `dir?` (`flip`\|`on`\|`off`\|`alt`) |
+| `ping` | Checks that edgePass is alive | — |
+| `focus` | Brings the pill to the front (does not expand) | — |
+| `status` | Vault state + hold | — |
+| `search` | Searches the local index: **names only** (namespace, path, key), without opening the vault | `query?`, `limit?` (default 50, max 200) |
+| `meter` | **Opens the Batch tab (`meter`) with the secret's data**: resolves a path (or a `query` against the index) and the widget reads its fields and shows them for copying (eye per row · ⧉ copy all). The caller **never sees values** | `query?` **or** `path` (+ `namespace?`, `title?`) |
+| `unseal` / `seal` | Open / close the vault now | — |
+| `hold` | Do not auto-seal for N seconds | `secs?` (default 3600, max 86400) |
+| `run` | Runs a command with the secrets **in the child's environment** (local scripts; no popup) | `entries[]`, `cmd[]`, `cwd?`, `keys?`, `timeoutSecs?` (default 300, max 3600) |
+| `request` | GW: asks for a `run` with an Allow once / 2h / Deny popup. Immediate `pending`/`running` reply. **Never values.** | `action=run`, `actor?`, `namespace`, `path` (or `entries[]`), `cmd[]`, `keys?`, `reason?`, `cwd?`, `detach?` |
+| `request-status` | Snapshot of one request (or the list when there is no `id`). No values / stdout | `id?` |
+| `request-wait` | Waits up to `timeoutSecs` (max 60) for it to leave pending/running | `id`, `timeoutSecs?` |
+| `request-resolve` | UI only: `deny` / `allow-once` / `allow-2h` | `id`, `decision` |
+| `ingest-form` | Opens the batch form to enter secrets | `namespace`, `path`, `keys[]`, `title?` |
+| `sync_index` | Reindexes the local index now (same as the UI `↻`) | — |
+| `toggles` | The header LEDs **as data**: read the list + the vocabulary (`catalog`), or rewrite it (validated: catalog ids, max 8) | — · `set[]` |
+| `toggle` | Fires a LED (the same as a header click): Rust resolves the action from `config.json`, you only name the LED | `id`, `dir?` (`flip`\|`on`\|`off`\|`alt`) |
+| `services` | The owner's services **as data**: read the list + the `svc.*` half of the catalog, or replace it (validated, max 24) | — · `set[]` |
 
-> `export-env` **ya no existe**: escribía los secretos en claro en la ruta que pidiera el
-> cliente. Usa `run`, que se los pasa al proceso hijo y nunca toca el disco.
+> `export-env` **no longer exists**: it wrote secrets in clear text to whatever
+> path the caller asked for. Use `run`, which hands them to a child process and
+> never touches disk.
 
-### Buscar antes de pedir (`search`)
+### Search before asking (`search`)
 
-La mitad que faltaba del flujo: `ingest-form` crea, `search` comprueba. Un agente puede ver
-si el secreto ya existe — y con qué nombres — antes de molestar al humano, y sin desbloquear
-nada (el índice guarda nombres, nunca valores):
+The missing half of the flow: `ingest-form` creates, `search` checks. An agent
+can see whether the secret already exists — and under which names — before
+bothering the human, and without unlocking anything (the index stores names,
+never values):
 
 ```json
 {"op":"search","query":"infisi cb2","limit":20}
@@ -58,84 +63,89 @@ nada (el índice guarda nombres, nunca valores):
 ]}
 ```
 
-`query` vacío devuelve lo más usado primero. Los términos se combinan con **AND** (todos deben
-aparecer) y hay alias cortos: `infisi`→`infisical`, `bao`→`openbao`/`vault`, `cf`→`cloudflare`,
-`sb`→`supabase`, `pg`/`db`→`postgres`, `dk`→`dokploy`, `vg`→`vetgroom`.
+An empty `query` returns the most used first. Terms are combined with **AND**
+(all must appear) and there are short aliases: `infisi`/`infis`/`infiscal`→`infisical`,
+`bao`→`openbao`/`vault`, `ob`→`openbao`, `cf`→`cloudflare`, `sb`→`supabase`,
+`pg`/`db`→`postgres`.
 
-> El índice es local y puede estar viejo: si `search` no ve algo recién creado por fuera,
-> manda `↻` en la UI o llama a `sync_index` antes de concluir que falta. `sync_index`
-> responde `{ ok, count }` (o `{ ok: false, error }`), y sí abre el vault si hace falta:
-> cuenta como actividad del widget.
+> The index is local and can be stale: if `search` does not see something
+> created outside, hit `↻` in the UI or call `sync_index` before concluding it is
+> missing. `sync_index` replies `{ ok, count }` (or `{ ok: false, error }`), and
+> it does open the vault when needed: it counts as widget activity.
 
-> **KV v1 y v2**: el índice detecta por namespace si el mount `kv` es KV v1 o v2
-> (`sys/mounts`) y usa las rutas de cada versión, así que los namespaces con el mount en v1
-> (acá: `vetgroom`, `vetops`, `cloudflare`) también entran. Copiar, editar y borrar usan el
-> mismo camino, así que en un mount v1 también funcionan. El log anota una línea por
-> namespace: `kv: namespace <ns> tiene mount 'kv' en KV v1|v2`.
+> **KV v1 and v2**: the index detects per namespace whether the `kv` mount is
+> KV v1 or v2 (`sys/mounts`) and uses that version's paths, so namespaces with a
+> v1 mount also work. Copy, edit and delete use the same path, so they work on a
+> v1 mount too. The log records one line per namespace:
+> `kv: namespace <ns> tiene mount 'kv' en KV v1|v2`.
 
-### Ver los datos de un secreto en el tab Batch (`meter`)
+### Seeing a secret's data in the Batch tab (`meter`)
 
-`search` contesta *qué existe*; `meter` trae los **valores** a la pantalla — es lo que un humano
-pide cuando dice **«usa edge pass»** o «dame los datos de la cuenta de betty». Y lo hace sin que
-el valor salga del widget: el op solo nombra un path, **el widget lo lee con su token** y rellena
-el tab Batch. Quien llamó (un agente) no recibe ningún valor, así que no puede pegarlo en un chat,
-un log ni un commit.
+`search` answers *what exists*; `meter` brings the **values** to the screen —
+what a human asks for when they say **"use edge pass"** or "give me betty's
+account details". And it does so without the value leaving the widget: the op
+only names a path, **the widget reads it with its token** and fills the Batch
+tab. The caller (an agent) gets no value at all, so it cannot paste it into a
+chat, a log or a commit.
 
 ```json
 {"op":"meter","query":"betty"}
 ```
 
 ```json
-{"ok":true,"id":1789…,"namespace":"dokploy","path":"projects/lotly/demo-users"}
+{"ok":true,"id":1789…,"namespace":"prod","path":"projects/app/users"}
 ```
 
-Cómo se direcciona:
+How it is addressed:
 
-| Forma | Qué abre |
+| Shape | What it opens |
 |---|---|
-| `{"query":"betty"}` | El path al que apuntan los resultados, **si todos caen en uno solo** |
-| `{"namespace":"dokploy","path":"projects/lotly/demo-users"}` | Ese path, sin consultar el índice |
-| `title?` | Título del panel (default «Batch · copiar») |
+| `{"query":"betty"}` | The path the results point at, **if they all fall in one** |
+| `{"namespace":"prod","path":"projects/app/users"}` | That path, without consulting the index |
+| `title?` | Panel title (default "Batch · copy") |
 
-Reglas y errores, tal como salen:
+Rules and errors, as they come out:
 
-- **Query → un solo path.** `betty` que cae en los 6 campos `BETTY_*` de un path abre ese path.
-- **Ambigua**: si caen en varios paths responde `{ ok:false, error:"ambiguo…",
-  candidates:[{namespace,path,key}…] }` — sin adivinar; repite con `path`.
-- **Sin coincidencias**: `{ ok:false, error:"sin coincidencias en el índice local (puede estar
-  viejo: prueba sync_index)" }`.
-- **Path sin campos / sin token / vault sellado sin auto-unseal**: el error se ve en el widget
-  (es él quien lee), no en la respuesta del pipe.
-- Si el panel ya está abierto, `meter` lo **reemplaza** por el path nuevo (una sola ranura
-  pendiente, igual que `ingest-form`).
+- **Query → one path.** `betty` falling on the 6 `BETTY_*` fields of one path
+  opens that path.
+- **Ambiguous**: if they fall in several paths it replies
+  `{ ok:false, error:"ambiguo…", candidates:[{namespace,path,key}…] }` — it does
+  not guess; repeat with `path`.
+- **No matches**: `{ ok:false, error:"sin coincidencias en el índice local
+  (puede estar viejo: prueba sync_index)" }`.
+- **Path without fields / no token / sealed vault with auto-unseal off**: the
+  error appears in the widget (it is the one reading), not in the pipe reply.
+- If the panel is already open, `meter` **replaces** it with the new path (one
+  pending slot, like `ingest-form`).
 
-Qué hace el humano en ese panel, ya dentro del widget:
+What the human does in that panel, inside the widget:
 
-- Cada fila: **Variable** + **Valor**. Los valores se abren **visibles** y se **auto-ocultan a los
-  8s** (`METER_AUTO_MASK_MS`); el botón `ver`/`ocultar` de cada fila y `ver todo`/`ocultar todo`
-  los vuelven a mostrar.
-- **`⧉` por fila** copia ese valor al portapapeles (sin mostrarlo en ningún chat).
-- **`⧉ copiar todo`** copia el bloque entero como líneas `KEY=valor` (formato `.env`), que es
-  justo lo que un chat no puede llevarse.
-- Sigue siendo el mismo editor: `Enter` o ✓ guarda en OpenBao (crea versión nueva), y «Descartar»
-  cierra sin escribir. Nada se auto-guarda.
+- Each row: **Variable** + **Value**. Values open **visible** and
+  **auto-mask after 8s** (`METER_AUTO_MASK_MS`); each row's `show`/`hide` button
+  and `show all`/`hide all` bring them back.
+- **`⧉` per row** copies that value to the clipboard (without showing it in any
+  chat).
+- **`⧉ copy all`** copies the whole block as `KEY=value` lines (`.env` format),
+  which is exactly what a chat cannot take away.
+- It is still the same editor: `Enter` or ✓ saves to OpenBao (creates a new
+  version), and "Discard" closes without writing. Nothing auto-saves.
 
 ```powershell
-# El envoltorio para agentes y humanos
+# The wrapper for agents and humans
 powershell -File scripts\edgepass-meter.ps1 -Query "betty"
-powershell -File scripts\edgepass-meter.ps1 -Namespace dokploy -Path "projects/lotly/demo-users"
+powershell -File scripts\edgepass-meter.ps1 -Namespace prod -Path "projects/app/users"
 powershell -File scripts\edgepass-meter.ps1 -Query "infisi cb2" -Title "CB2 Infisical"
 ```
 
-> `meter` es **solo pipe local**: abre una ventana, así que no forma parte del contrato remoto
-> (`request` / HTTP con Grok) — un actor fuera de esta máquina sigue recibiendo únicamente
-> nombres. El pipe se crea con DACL de un solo ACE (tu SID), y nada de esto escribe valores a
-> disco.
+> `meter` is **local pipe only**: it opens a window, so it is not part of the
+> remote contract (`request` / HTTP with Grok) — an actor outside this machine
+> still receives names only. The pipe is created with a single-ACE DACL (your
+> SID), and none of this writes values to disk.
 
-### Ejemplo de Uso
+### Usage example
 
 ```powershell
-# PowerShell — formulario batch (el humano pega los valores, el agente no los ve)
+# PowerShell — batch form (the human pastes the values, the agent never sees them)
 powershell -File scripts\edgepass-ingest-form.ps1 `
   -Namespace buenaidee `
   -Path "projects/cb2/infisical" `
@@ -143,7 +153,8 @@ powershell -File scripts\edgepass-ingest-form.ps1 `
   -Title "CB2 Infisical"
 ```
 
-Pipe JSON directo (una línea JSON por petición, al named pipe `\\.\pipe\edgepass`):
+Direct JSON pipe (one JSON line per request, to the named pipe
+`\\.\pipe\edgepass`):
 
 ```powershell
 $json = '{"op":"ingest-form","namespace":"buenaidee","path":"projects/cb2/infisical","keys":["DATABASE_URL","DB_USER"]}'
@@ -156,245 +167,272 @@ $reader.ReadLine()
 $pipe.Dispose()
 ```
 
-### Ejecutar un comando con secretos (sin escribir nada a disco)
+### Running a command with secrets (without writing anything to disk)
 
 ```json
 {"op":"run","entries":[{"namespace":"buenaidee","path":"projects/cb2/infisical"}],"cmd":["npm","run","migrate"]}
 ```
 
-Responde `{ ok, code, env[], stdout, stderr }` — solo los **nombres** de las variables, nunca
-los valores. `keys` limita qué se inyecta.
+It replies `{ ok, code, env[], stdout, stderr }` — only the variable **names**,
+never the values. `keys` limits what is injected.
 
-`timeoutSecs` corta el comando (default 300, máx 3600). Al vencer, mata el **árbol** de
-procesos y responde:
+`timeoutSecs` cuts the command (default 300, max 3600). When it expires, it
+kills the process **tree** and replies:
 
 ```json
 {"ok":false,"timeout":true,"timeoutSecs":300,"error":"timeout tras 300s: proceso terminado","code":null,"env":["DATABASE_URL"],"stdout":"…","stderr":"…"}
 ```
 
-Motivo del timeout: un `run` colgado dejaba al llamante esperando para siempre. El kill es
-del árbol porque en Windows `npm run x` es `npm.cmd` → `node`: matar solo el primero deja vivo
-al segundo (y con los pipes abiertos).
+Why the timeout: a hung `run` left the caller waiting forever. The kill takes
+the tree because on Windows `npm run x` is `npm.cmd` → `node`: killing only the
+first leaves the second alive (with the pipes open).
 
-`cmd[0]` se resuelve por `PATH` + `PATHEXT` antes de lanzar, así que `["npm", "run", "migrate"]`
-funciona tal cual: Windows solo añade `.exe` por su cuenta, y `npm` es `npm.cmd`. Si el binario
-no aparece, el error lleva el nombre que escribiste, no una ruta resuelta rara.
+`cmd[0]` is resolved through `PATH` + `PATHEXT` before launching, so
+`["npm", "run", "migrate"]` works as written: Windows only adds `.exe` on its
+own, and `npm` is `npm.cmd`. If the binary is not found, the error carries the
+name you typed, not a strange resolved path.
 
-## Estados del Vault (Seal Status)
+## Vault states (seal status)
 
-El estado del vault se muestra en el chip de estado y afecta el comportamiento:
+The vault state appears in the status chip and affects behaviour:
 
-| Estado | Código | Descripción |
-|--------|--------|-------------|
-| `open` | 0 | Vault abierto, secretos accesibles |
-| `sealed` | 1 | Vault sellado, secretos protegidos |
-| `warn` | 2 | Vault inicializado pero con advertencias |
-| `down` | 3 | OpenBao offline o no reachable |
+| State | Code | Description |
+|-------|------|-------------|
+| `open` | 0 | Vault open, secrets accessible |
+| `sealed` | 1 | Vault sealed, secrets protected |
+| `warn` | 2 | Vault initialised but with warnings |
+| `down` | 3 | OpenBao offline or unreachable |
 
-## Comportamiento Automático
+## Automatic behaviour
 
-### Auto-Unseal
-- Al iniciar EdgePass, si el vault está sellado, **se desbloquea automáticamente** leyendo las keys del init local
-- Las keys nunca se muestran en la UI
-- Configuración: `autoUnseal` (default: `true`)
+### Auto-unseal
+- On start, if the vault is sealed, **it is unlocked automatically** by reading
+  the keys from the local init file.
+- The keys are never shown in the UI.
+- Setting: `autoUnseal` (default: `true`).
 
-### Auto-Seal (opt-in, por defecto desactivado)
-- **Por defecto NO se sella nunca.** Sellar es un efecto sobre *todo* el vault: corta a los
-  demás consumidores (otros proyectos, scripts, servicios). Que este widget esté quieto no
-  es una señal válida para cerrarles el vault.
-- Si se configura `autoSealIdleSecs` > 0, se vuelve a sellar tras ese idle
-- Valor `0` (default) = nunca sellar automáticamente
-- Botón "Cerrar" en la UI para sellar manualmente, cuando tú lo decides
-- Las configs antiguas que traían `300` se migran a `0` una sola vez al arrancar
+### Auto-seal (opt-in, off by default)
+- **By default the vault is never sealed.** Sealing affects the *whole* vault: it
+  cuts off the other consumers (other projects, scripts, services). This widget
+  being idle is not a valid signal to close their vault.
+- If `autoSealIdleSecs` > 0 is configured, it seals again after that idle.
+- Value `0` (default) = never auto-seal.
+- A "Close" button in the UI seals manually, when you decide to.
+- Old configs that carried `300` are migrated to `0` once at startup.
 
-### Auto-Sync
-- Al expandir la ventana, EdgePass **sincroniza el índice** de secretos automáticamente
-- Configuración: `autoSync` (default: `true`)
-- Botón `↻` para reindexar manualmente
+### Auto-sync
+- Expanding the window makes edgePass **sync the index** automatically.
+- Setting: `autoSync` (default: `true`).
+- `↻` button to reindex manually.
 
-### Auto-Load Token
-- Carga el token de autenticación desde el archivo init JSON automáticamente
-- Configuración: `autoLoadToken` (default: `true`)
+### Auto-load token
+- Loads the authentication token from the init JSON file automatically.
+- Setting: `autoLoadToken` (default: `true`).
 
-## Gestión de Secretos
+## Secret management
 
-### Búsqueda
-- Input de búsqueda en la parte superior
-- Búsqueda indexada en namespaces configurados
-- Resultado muestra: clave, namespace, path, uso reciente
+### Search
+- Search input at the top.
+- Indexed search across the configured namespaces.
+- The result shows: key, namespace, path, recent use.
 
-### Copiar Secreto
-- Click en un resultado copia el valor al clipboard
-- Muestra toast con la label del secreto copiado
-- Incrementa contador de uso (`useCount`)
+### Copy a secret
+- Clicking a result copies the value to the clipboard.
+- Shows a toast with the copied secret's label.
+- Increments the use counter (`useCount`).
 
-### Nuevo Secreto (Panel "Nuevo")
-- Formulario para agregar un secreto individual
-- Campos: Namespace, Path, Variable, Valor
-- Opción: "Reemplazar path completo" (overwrite existing)
+### New secret ("New" panel)
+- Form to add a single secret.
+- Fields: Namespace, Path, Variable, Value.
+- Option: "Replace whole path" (overwrite existing).
 
-### Lote / Batch (Panel "Lote")
-- Abierto automáticamente vía `ingest-form` pipe, o relleno desde el vault vía `meter`
-- Tabla con variables y valores para completar (el humano pega los valores) o ya leídos
-- Cada fila: `ver`/`ocultar` el valor y `⧉` para copiarlo · el pie: `⧉ copiar todo` (líneas
-  `KEY=valor`) y `ver todo`/`ocultar todo`
-- Los valores de `meter` se auto-ocultan a los 8s (`METER_AUTO_MASK_MS`) y el ojo los vuelve a mostrar
-- Opción: "Reemplazar path completo"
-- Guardar lote en vault con un click
+### Batch panel
+- Opened automatically through the `ingest-form` pipe, or filled from the vault
+  through `meter`.
+- Table of variables and values to fill in (the human pastes the values) or
+  already read.
+- Each row: `show`/`hide` the value and `⧉` to copy it · the footer:
+  `⧉ copy all` (`KEY=value` lines) and `show all`/`hide all`.
+- `meter` values auto-mask after 8s (`METER_AUTO_MASK_MS`) and the eye shows
+  them again.
+- Option: "Replace whole path".
+- Save the batch to the vault with one click.
 
-## Configuración (Panel "Config")
+## Settings ("Config" panel)
 
-| Parámetro | Descripción | Default |
+| Parameter | Description | Default |
 |-----------|-------------|---------|
-| `baoAddr` | URL del servicio OpenBao | `http://127.0.0.1:8200` |
-| `mount` | Mount point del vault | `kv` |
-| `namespaces` | Namespaces a indexar (comma-separated). `.` = root **+ todos los hijos** vía `sys/namespaces` | `.` |
-| `initPath` | Ruta al JSON de init (token+keys) | `` |
-| `autoSealIdleSecs` | Segundos de idle antes de sellar (0 = nunca) | `0` |
-| `token` | Token manual (si no se usa initPath) | `` |
+| `baoAddr` | OpenBao service URL | `http://127.0.0.1:8200` |
+| `mount` | Vault mount point | `kv` |
+| `namespaces` | Namespaces to index (comma-separated). `.` = root **+ all children** through `sys/namespaces` | `.` |
+| `initPath` | Path to the init JSON (token+keys) | `` |
+| `autoSealIdleSecs` | Idle seconds before sealing (0 = never) | `0` |
+| `token` | Manual token (when `initPath` is not used) | `` |
 
-### Botones de Acción (LEDs del header)
+### Action buttons (header LEDs)
 
-Los LEDs del header (`KV`, `GW`, `GOV`…) **son datos**: cada uno es una fila de
-`config.json` → `toggles[]` con `probe` (qué mira) y `on` / `off` / `alt` (qué
-hace un click · `alt` = Ctrl o clic derecho). Se editan en **Ajustes → Toggles del
-header** (máx **6**, etiqueta de 1-4 letras, `＋ Agregar un toggle`) o por el pipe.
+The header LEDs (`KV`, `GW`, `GOV`…) **are data**: each one is a row of
+`config.json` → `toggles[]` with a `probe` (what it watches) and `on` / `off` /
+`alt` (what a click does · `alt` = Ctrl or right click). They are edited in
+**Settings → Header toggles** (max **8**, label 1-4 letters, `＋ Add a toggle`)
+or over the pipe.
 
-Vocabulario (lo publica el propio widget en `catalog`, nunca lo adivines):
+Vocabulary (the widget publishes it in `catalog`, never guess it):
 
-| `probe` | ON cuando |
-|---------|-----------|
-| `vault.seal` | vault alcanzable y abierto (ámbar: no responde o sin inicializar) |
-| `qring.process` | `qringd` vivo (ámbar: falta el pack) — el LED se llama **`QR`** |
-| `qring.governance` | los rings pueden correr (y gastar) — **y es el LED que pulsa cuando hay un Allow esperando** |
-| `docker.desktop` | el motor de Docker Desktop responde (ámbar: instalado pero parado) |
-| `gha.runner` | Docker arriba **y** el runner local de GitHub Actions sano — el LED **`GW`** |
-| `skills.sync` | la biblioteca de skills está en fase: 0 enlaces por arreglar (ámbar: deriva, o falta el sincronizador) |
-| `skills.watch` | el vigilante del hub está corriendo (auto-sincronización) |
+| `probe` | ON when |
+|---------|---------|
+| `vault.seal` | vault reachable and open (amber: no answer or not initialised) |
+| `qring.process` | `qringd` alive (amber: pack missing) — the LED is called **`QR`** |
+| `qring.governance` | rings may run (and spend) — **and it is the LED that pulses when an Allow is waiting** |
+| `docker.desktop` | the Docker Desktop engine answers (amber: installed but stopped) |
+| `gha.runner` | Docker up **and** the local GitHub Actions runner healthy — the **`GW`** LED |
+| `skills.sync` | the skill library is in phase: 0 links to fix (amber: drift, or the syncer is missing) |
+| `skills.watch` | the hub watcher is running (auto-sync) |
+| `mcp.servers` | every `mcpServers[]` row is up and every declared tunnel is connected |
+| `mcp.<id>` *(derived)* | that one MCP row is up and its tunnel (if declared) is connected |
+| `svc.<id>` *(derived)* | that `services[]` row's `process`/`cmd` probe says on |
 
-| `action` | Efecto |
+| `action` | Effect |
 |----------|--------|
-| `vault.unseal` / `vault.seal` | abrir (keys del init) / sellar (token; corta a todos los clientes) |
-| `qring.on` / `qring.off` / `qring.restart` | arrancar / parar / reiniciar el gateway. **Parar apaga también la política** (un gateway parado no gobierna nada); arrancar no la enciende |
-| `qring.govern.on` / `qring.govern.off` | permitir / bloquear que los rings corran. Encender con el gateway parado **lo arranca primero** (con el vault); apagar vale con el gateway arriba, que es el caso que `GOV` cubre |
-| `docker.up` | arrancar Docker Desktop y esperar el motor (hasta 120 s) |
-| `gha.up` | asegurar el runner local: Docker, imagen (la construye si falta) y contenedor — lo **recrea con token nuevo** si está caído, parado o en loop de credencial |
-| `gha.down` | parar el contenedor del runner (Docker Desktop queda quieto) |
-| `gha.repair` | recrear el runner aunque parezca sano (si GitHub lo ve `offline`) |
-| `daemoncurier.open` | abrir/enfocar DaemonCurier (el HUD de WSL2/sistema) |
-| `skills.sync` | re-enlazar los 50 agentes desde el hub de skills (no copia archivos) |
-| `skills.watch.on` / `skills.watch.off` | encender / apagar la auto-sincronización del hub |
+| `vault.unseal` / `vault.seal` | open (init keys) / seal (token; cuts off every client) |
+| `qring.on` / `qring.off` / `qring.restart` | start / stop / restart the gateway. **Stopping also turns the policy off** (a stopped gateway governs nothing); starting does not turn it on |
+| `qring.govern.on` / `qring.govern.off` | allow / block the rings from running. Turning it on with the gateway stopped **starts it first** (vault included); turning it off is valid with the gateway up, which is the case `GOV` covers |
+| `docker.up` | start Docker Desktop and wait for the engine (up to 120 s) |
+| `gha.up` | ensure the local runner: Docker, image (built if missing) and container — **recreates it with a fresh token** if it is down, stopped or in the credential loop |
+| `gha.down` | stop the runner container (Docker Desktop is left alone) |
+| `gha.repair` | recreate the runner even when it looks healthy (if GitHub sees it `offline`) |
+| `daemoncurier.open` | open/focus DaemonCurier (the WSL2/system HUD) |
+| `skills.sync` | re-link the agents from the skills hub (does not copy files) |
+| `skills.watch.on` / `skills.watch.off` | turn the hub auto-sync on / off |
+| `mcp.on` / `mcp.off` / `mcp.restart` | the whole MCP list and its tunnels |
+| `mcp.<id>.on\|off\|restart` *(derived)* | one MCP row and its tunnel |
+| `svc.<id>.on\|off` *(derived)* | exactly the command that service declared in `actions` |
 
 ```jsonc
-{"op":"toggles"}                                     // LEDs + catálogo
+{"op":"toggles"}                                     // LEDs + catalog
 {"op":"toggles","set":[{"id":"kv","label":"KV","probe":"vault.seal",
                         "on":"vault.unseal","off":"vault.seal"}]}
 {"op":"toggle","id":"kv","dir":"on"}                 // flip | on | off | alt
+
+{"op":"services"}                                    // services + svc.* vocabulary
+{"op":"services","set":[{"id":"mi-api","label":"API",
+                         "probe":{"kind":"process","image":"mi-api.exe"}}]}
 ```
 
-`{"op":"status"}` también devuelve `toggles`. Un id desconocido se rechaza **con
-el catálogo en la respuesta**. Helper:
-`powershell -File scripts\edgepass-toggles.ps1 -List` (`-Catalog`, `-Fire kv -Dir off`,
-`-Set <json>`). Contrato completo: `docs/TOGGLE-CONTRACT.md`.
+`{"op":"status"}` also returns `toggles`. An unknown id is rejected **with the
+catalog in the reply**. Helper:
+`powershell -File scripts\edgepass-toggles.ps1 -List` (`-Catalog`,
+`-Fire kv -Dir off`, `-Set <json>`, `-Services`, `-SetServices <json>`). Full
+contract: `docs/TOGGLE-CONTRACT.md`.
 
-- **Instalación nueva**: solo `KV` (el único backend garantizado es el vault).
-- **Actualización**: conserva los tres de siempre (`KV`, `GW`, `GOV`) y el `GW` viejo
-  —que era el proceso del Q-ring— pasa a `QR` (v3→v4), porque `GW` ahora vigila el runner
-  local de GHA. Queda `KV · QR · GOV · GW`.
-- **Runner local de GHA (LED `GW`)**: imagen `gha-local:latest`
-  (`docker/gha-local/`), el contenedor se registra a un repo con labels
-  `self-hosted,Linux,X64,local` y el workflow lo usa con `runs-on: [self-hosted, Linux,
-  X64, local]`. Las filas viven en `config.json` → `ghaRunners[]` (id, repo, labels,
-  image, `secretEnv` con credenciales de OpenBao), y el widget le acuña el registration
-  token con `gh api` al arrancar. Camino manual: `scripts\gha-local.ps1`
-  (`-Add`, `-Build`, `-Ensure`, `-Status`, `-Logs`, `-Down`, `-Watch`). Runbook:
-  `docker/gha-local/README.md`; el pipeline local (build → GHCR → deploy fino) está en
+- **Fresh install**: only `KV` (the only guaranteed backend is the vault).
+- **Upgrade**: keeps the usual three (`KV`, `GW`, `GOV`) and the old `GW` — which
+  was the Q-ring process — becomes `QR` (v3→v4), because `GW` now watches the
+  local GHA runner. The result is `KV · QR · GOV · GW`.
+- **Local GHA runner (`GW` LED)**: image `gha-local:latest`
+  (`docker/gha-local/`), the container registers to a repo with labels
+  `self-hosted,Linux,X64,local` and the workflow uses it with
+  `runs-on: [self-hosted, Linux, X64, local]`. The rows live in `config.json` →
+  `ghaRunners[]` (id, repo, labels, image, `secretEnv` with OpenBao
+  credentials), and the widget mints the registration token with `gh api` at
+  startup. Manual path: `scripts\gha-local.ps1` (`-Add`, `-Build`, `-Ensure`,
+  `-Status`, `-Logs`, `-Down`, `-Watch`). Runbook: `docker/gha-local/README.md`;
+  the local pipeline (build → GHCR → thin deploy) is in
   `scripts\build-and-deploy.ps1` + `docker/gha-local/deploy.yml`.
-- **Ver qué corre y por qué falló**: el runner no vuelca la salida de los steps a su
-  stdout, así que hay dos fuentes: `docker logs gha-local-<id>` (ciclo de vida: qué job
-  corre, cómo terminó) y `_diag/Worker_*.log` adentro del contenedor (el detalle del
-  step). El `detail` del LED `GW` dice el job en curso, y por el pipe:
-  `{"op":"gha"}` (estado + job) y `{"op":"gha-logs","id":"cb2","tail":200,"source":"both"}`.
-  El widget abre el visor solo cuando arranca un job (`ghaWatch`), o
-  `scripts\gha-local.ps1 -Watch -Id cb2` a mano.
-- **Que un repo compile en local y no en GitHub**: el `runs-on` decide. Registrar el runner
-  al repo (`gha-local.ps1 -Add`/`-Ensure`) + la variable del repo `RUNNER` con
-  `["self-hosted","Linux","X64","local"]` (por la API con el JSON por **stdin**: con
-  `gh variable set --body` PowerShell 5.1 guarda el valor sin las comillas y `fromJSON()`
-  revienta) + `runs-on: ${{ fromJSON(vars.RUNNER || '["ubuntu-latest"]') }}`. Volver atrás
-  es borrar la variable. Y para **cero GitHub** en el medio (sin encolar nada):
-  `scripts\act-local.ps1` (nektos/act en Docker).
-- **Nuevo tipo de LED**: una fila en `src-tauri/src/toggles.rs` (`PROBES` /
-  `ACTIONS`) + su rama en `probe_state` / `run_action`; el resto sale solo.
-- **Skills (`SYNC` / `AUTO`)**: opt-in, no vienen en los defaults porque apuntan a
-  `C:\proyectos\skills-sync\skills_sync.py` (herramienta de la máquina, no del producto;
-  se puede cambiar con `EDGEPASS_SKILLS_SYNC`). El puente es `src-tauri/src/skills.rs`:
-  el LED lee una caché de 15 s (un `status` completo tarda ~1 s y no puede bloquear la UI)
-  y las acciones corren el script en `spawn_blocking`. El vigilante es un **proceso hijo**
-  de edgePass: muere con él (para que viva desde el arranque, `skills_sync.py
-  install-autostart`).
+- **Seeing what runs and why it failed**: the runner does not dump step output
+  to its stdout, so there are two sources: `docker logs gha-local-<id>`
+  (lifecycle: which job runs, how it ended) and `_diag/Worker_*.log` inside the
+  container (the step detail). The `GW` LED's `detail` says the job in flight,
+  and over the pipe: `{"op":"gha"}` (state + job) and
+  `{"op":"gha-logs","id":"cb2","tail":200,"source":"both"}`. The widget opens
+  the viewer by itself when a job starts (`ghaWatch`), or
+  `scripts\gha-local.ps1 -Watch -Id cb2` by hand.
+- **A repo builds locally but not on GitHub**: `runs-on` decides. Register the
+  runner to the repo (`gha-local.ps1 -Add`/`-Ensure`) + the repo variable
+  `RUNNER` with `["self-hosted","Linux","X64","local"]` (through the API with the
+  JSON on **stdin**: with `gh variable set --body`, PowerShell 5.1 stores the
+  value without the quotes and `fromJSON()` blows up) +
+  `runs-on: ${{ fromJSON(vars.RUNNER || '["ubuntu-latest"]') }}`. Reverting means
+  deleting the variable. And for **zero GitHub** in the middle (queueing
+  nothing): `scripts\act-local.ps1` (nektos/act in Docker).
+- **A new kind of LED**: one row in `src-tauri/src/toggles.rs` (`RAW_PROBES` /
+  `RAW_ACTIONS`) plus its arm in `probe_state` / `run_action`; the rest follows.
+  A *service* LED (the common case) needs no Rust: it is `services[]` data and
+  the `svc.<id>` probe, see `skills/edgepass-led`.
+- **Skills (`SYNC` / `AUTO`)**: opt-in, not in the defaults because they point
+  at `C:\proyectos\skills-sync\skills_sync.py` (a machine tool, not a product
+  one; it can be changed with `EDGEPASS_SKILLS_SYNC`). The bridge is
+  `src-tauri/src/skills.rs`: the LED reads a 15 s cache (a full `status` takes
+  ~1 s and must not block the UI) and the actions run the script in
+  `spawn_blocking`. The watcher is a **child process** of edgePass: it dies with
+  it (to have it live from startup, `skills_sync.py install-autostart`).
 
-## Eventos y Listeners
+## Events and listeners
 
-EdgePass emite eventos que las skills pueden escuchar:
+edgePass emits events that skills can listen to:
 
 ### `ingest-form`
-- Emitido cuando un formulario batch está pendiente de completar
-- Payload: `{ id, namespace, path, keys[], title? }`
-- La ventana se expande automáticamente para mostrar el formulario
+- Emitted when a batch form is waiting to be filled in.
+- Payload: `{ id, namespace, path, keys[], title? }`.
+- The window expands automatically to show the form.
 
 ### `grant-request`
-- Emitido cuando Grok/GW pide un `run` y no hay grant 2h para ese path
-- Payload: `{ id, actor, action, namespace, path, keys[], cmd[], reason, expiresAt }` (nombres; nunca valores)
-- Overlay Allow once / 2 horas / Deny; Esc = deny
+- Emitted when Grok/GW asks for a `run` and there is no 2h grant for that path.
+- Payload: `{ id, actor, action, namespace, path, keys[], cmd[], reason, expiresAt }` (names; never values).
+- Allow once / 2 hours / Deny overlay; Esc = deny.
 
 ### `get_status`
-- Retorna el estado actual del vault y configuración
-- Payload completo: `StatusDto` (ver tipo en código)
+- Returns the current vault state and configuration.
+- Full payload: `StatusDto` (see the type in code).
 
-## Integración con LLMs/Agents
+## LLM/agent integration
 
-### GW (Grok) — search + run con Allow
+### GW (Grok) — search + run with Allow
 
-Grok **nunca recibe valores**. Lista nombres; para usar un secreto pide un `run` en este nodo. El humano ve Allow once / 2 horas / Deny. El env vive solo en el proceso hijo.
+Grok **never receives values**. It lists names; to use a secret it asks for a
+`run` on this node. The human sees Allow once / 2 hours / Deny. The env lives
+only in the child process.
 
 HTTP (Bearer `EDGEPASS_OPERATOR_TOKEN`, Tailscale `:7437`):
 
-1. `GET /v1/secrets/search?query=infisi+cb2` — nombres. Sin popup.
-2. `POST /v1/secrets/request` `{actor:"grok", action:"run", namespace, path, keys?, cmd:[], reason}` → `202` + `requestId` (`pending` o `running` si hay grant 2h del mismo path).
-3. Poll `GET /v1/secrets/request?id=` cada 2–5s (máx ~5 min) hasta `granted|denied|timeout`.
-4. Si `granted`: lee `ok`, `env[]` (nombres), `code`. **No** scrapes stdout (ni viene en este canal).
-5. Si `denied` / `timeout` / `sealed`: para. No inventes valores. No pidas que te los peguen.
+1. `GET /v1/secrets/search?query=infisi+cb2` — names. No popup.
+2. `POST /v1/secrets/request` `{actor:"grok", action:"run", namespace, path, keys?, cmd:[], reason}` → `202` + `requestId` (`pending`, or `running` when a 2h grant exists for the same path).
+3. Poll `GET /v1/secrets/request?id=` every 2–5s (max ~5 min) until `granted|denied|timeout`.
+4. If `granted`: read `ok`, `env[]` (names), `code`. **Do not** scrape stdout (it does not come over this channel).
+5. If `denied` / `timeout` / `sealed`: stop. Do not invent values. Do not ask for them to be pasted.
 
-Pipe local (mismo contrato, ops `search` / `request` / `request-status`). El `run` directo del pipe **no** abre popup (scripts).
+Local pipe (same contract, `search` / `request` / `request-status` ops). The
+pipe's direct `run` **does not** open a popup (scripts).
 
-> `meter` **no** entra en este contrato: abre la ventana del widget y por eso vive solo en el
-> pipe local, para agentes que corren en tu misma máquina (ver *Ver los datos de un secreto en
-> el Meter*).
+> `meter` is **not** part of this contract: it opens the widget window and
+> therefore lives only on the local pipe, for agents running on your own machine
+> (see *Seeing a secret's data in the Batch tab*).
 
-Grant 2h: mismo `actor + namespace + path`. Otro path = otro Allow. Se pierde al matar el widget.
+2h grant: same `actor + namespace + path`. Another path = another Allow. It is
+lost when the widget dies.
 
-### Flujo Recomendado para Ingresar Secretos
+### Recommended flow for entering secrets
 
-1. **LLM identifica** que necesita secretos para una tarea
-2. **LLM pregunta primero** con `op: "search"` — si ya existen, no molesta a nadie
-3. **LLM envía** pipe JSON con `op: "ingest-form"` para lo que falte
-4. **EdgePass** abre formulario batch automáticamente
-5. **Usuario** completa los valores en la UI (la LLM nunca los ve)
-6. **Usuario** hace click en "Guardar lote en vault"
-7. **EdgePass** guarda todos los secretos y cierra el formulario
+1. **The LLM identifies** that it needs secrets for a task.
+2. **The LLM asks first** with `op: "search"` — if they already exist, it
+   bothers nobody.
+3. **The LLM sends** JSON pipe with `op: "ingest-form"` for what is missing.
+4. **edgePass** opens the batch form automatically.
+5. **The user** fills in the values in the UI (the LLM never sees them).
+6. **The user** clicks "Save batch to vault".
+7. **edgePass** stores every secret and closes the form.
 
-### Ejemplo Completo
+### Full example
 
 ```powershell
-# 1. EdgePass corriendo en background
+# 1. edgePass running in the background
 .\edgepass.exe
 
-# 2. LLM comprueba si ya existen (nombres solamente, sin abrir el vault)
+# 2. The LLM checks whether they already exist (names only, without opening the vault)
 $json = '{"op":"search","query":"infisi cb2","limit":20}'
 # → {"ok":true,"count":0,"hits":[]}
 
-# 3. LLM envía comando para ingresar lo que falta
+# 3. The LLM sends the command to enter what is missing
 $json = @{
     op = "ingest-form"
     namespace = "buenaidee"
@@ -405,20 +443,20 @@ $json = @{
 
 $json | .\edgepass.exe
 
-# 4. EdgePass abre el formulario, el usuario completa los valores y guarda
+# 4. edgePass opens the form, the user fills in the values and saves
 ```
 
-## Variables de Entorno
+## Environment variables
 
-Overrides de una ejecución, **sin escribir `config.json`** (nunca se persisten: guardar en
-Config escribe lo que está en pantalla, no el valor forzado). El proceso los anota en el log
-al detectarlos.
+Per-run overrides, **without writing `config.json`** (they are never persisted:
+saving in Config writes what is on screen, not the forced value). The process
+logs them when it detects them.
 
-| Variable | Descripción |
+| Variable | Description |
 |----------|-------------|
-| `EDGEPASS_AUTO_UNSEAL` | Sobrescribe `autoUnseal` (`1`/`true`/`yes`/`on` · `0`/`false`/`no`/`off`) |
-| `EDGEPASS_AUTO_SEAL_IDLE` | Sobrescribe `autoSealIdleSecs` (segundos; `0` = nunca sellar) |
-| `EDGEPASS_NAMESPACES` | Sobrescribe `namespaces` (separados por comas; `.` = root + todos los hijos) |
+| `EDGEPASS_AUTO_UNSEAL` | Overrides `autoUnseal` (`1`/`true`/`yes`/`on` · `0`/`false`/`no`/`off`) |
+| `EDGEPASS_AUTO_SEAL_IDLE` | Overrides `autoSealIdleSecs` (seconds; `0` = never seal) |
+| `EDGEPASS_NAMESPACES` | Overrides `namespaces` (comma-separated; `.` = root + all children) |
 
 ```powershell
 $env:EDGEPASS_NAMESPACES = "., buenaidee"
@@ -426,61 +464,69 @@ $env:EDGEPASS_AUTO_SEAL_IDLE = "0"
 .\edgepass.exe
 ```
 
-Valores inválidos (un texto donde va un número, un booleano que no es booleano) se ignoran
-con un warning en el log: un typo no puede dejar el widget sin config.
+Invalid values (text where a number goes, a boolean that is not a boolean) are
+ignored with a warning in the log: a typo cannot leave the widget without
+config.
 
-## Seguridad
+## Security
 
-- Las keys del init JSON **nunca se muestran** en la UI
-- El token se carga automáticamente pero no se expone, y vive en el keyring del OS
-- Sellar el vault es **opt-in**: por defecto edgePass no se lo cierra a nadie (ver Auto-Seal)
-- `baoAddr` tiene que ser loopback; cualquier otro host se rechaza **antes** de enviar el token
-- Ninguna operación escribe secretos a disco: el valor sale solo por el portapapeles (clics
-  tuyos en el widget) o por el entorno de un proceso hijo (`run`)
-- Ningún op **devuelve** un valor al llamante: `meter` solo nombra un path y el widget lee los
-  campos para mostrarlos en pantalla, así que un agente no acaba con el secreto en la mano. El
-  contrato remoto (`request` / HTTP) sigue siendo de nombres, y nunca se registra un valor en el
-  log (el log anota path y cuántos campos, no cuáles)
-- El named pipe `\\.\pipe\edgepass` se crea con una **DACL de un solo ACE**: acceso total para
-  el SID del usuario que corre edgePass y nada más (ni `Everyone`, ni `Authenticated Users`,
-  ni ACEs heredadas). Cualquier proceso de *tu* usuario puede hablar por el pipe — eso es la
-  frontera de confianza, y es la misma de siempre; lo que ya no pasa es que lo pueda abrir
-  otra cuenta de la máquina. Si la DACL no se puede construir, el pipe se crea sin restringir
-  y queda anotado en el log (nunca se finge que está restringido)
-- Solo secretos de namespaces configurados son indexados (`.` descubre e indexa todos)
-- El índice guarda **nombres** (namespace, path, variable), nunca valores — y `search` nunca
-  responde con más que esos nombres
-- `run` mata el **árbol** de procesos al vencer su `timeoutSecs` (default 300s), para que un
-  comando colgado no deje colgado al llamante
-- La UI tiene un panel **Logs** con el binario en ejecución, la ruta del log, el estado del
-  vault y las últimas líneas de log
-- Cerrar el widget (Logs → *Salir de edgePass*, dos pasos) **no** sella el vault, y viceversa:
-  sellar no cierra la app
-- Abrir el `.exe` dos veces no crea una segunda instancia: le pasa el foco a la que corre
+- The init JSON keys are **never shown** in the UI.
+- The token is loaded automatically but not exposed, and it lives in the OS keyring.
+- Sealing the vault is **opt-in**: by default edgePass does not close it on
+  anyone (see Auto-seal).
+- `baoAddr` must be loopback; any other host is rejected **before** the token is
+  sent.
+- No operation writes secrets to disk: the value leaves only through the
+  clipboard (your clicks in the widget) or a child process's environment (`run`).
+- No op **returns** a value to the caller: `meter` only names a path and the
+  widget reads the fields to show them on screen, so an agent does not end up
+  holding the secret. The remote contract (`request` / HTTP) remains names-only,
+  and a value is never logged (the log records path and how many fields, not
+  which ones).
+- The named pipe `\\.\pipe\edgepass` is created with a **single-ACE DACL**: full
+  access for the SID running edgePass and nothing else (no `Everyone`, no
+  `Authenticated Users`, no inherited ACEs). Any process of *your* user can talk
+  over the pipe — that is the trust boundary, and it is the same as always; what
+  no longer happens is another account on the machine being able to open it. If
+  the DACL cannot be built, the pipe is created unrestricted and the log records
+  it (it is never pretended to be restricted).
+- Only secrets from configured namespaces are indexed (`.` discovers and indexes
+  all of them).
+- The index stores **names** (namespace, path, variable), never values — and
+  `search` never answers with more than those names.
+- `run` kills the process **tree** when its `timeoutSecs` expires (default
+  300s), so a hung command does not leave the caller hanging.
+- The UI has a **Logs** panel with the running binary, the log path, the vault
+  state and the last log lines.
+- Closing the widget (Logs → *Quit edgePass*, two steps) **does not** seal the
+  vault, and vice versa: sealing does not close the app.
+- Opening the `.exe` twice does not create a second instance: it focuses the
+  running one.
 
-## Atajos de Interfaz
+## UI shortcuts
 
-| Atajo | Acción |
-|-------|--------|
-| Click en logo | Expandir/colapsar ventana |
-| Click en resultado | Copiar valor al clipboard |
-| Click en "Abrir"/"Cerrar" | Forzar desbloquear/sellar vault |
-| Click en "Svc" | Iniciar servicio OpenBao |
-| Click en `↻` | Reindexar secretos |
-| Arrastrar ventana cerca de borde | Anclar a ese borde (dock) |
-| Arrastrar lejos del borde | Flotar como pastilla |
-| `↑` `↓` + `Enter` | Moverse por los resultados y copiar el seleccionado |
-| `Esc` | Cancelar el aviso / desarmar el "Salir" / colapsar el panel |
-| Logs → *Salir de edgePass* | Cerrar la app (dos pasos; el vault queda como esté) |
+| Shortcut | Action |
+|----------|--------|
+| Click the logo | Expand/collapse the window |
+| Click a result | Copy the value to the clipboard |
+| Click "Open"/"Close" | Force unseal/seal the vault |
+| Click "Svc" | Start the OpenBao service |
+| Click `↻` | Reindex secrets |
+| Drag the window near an edge | Dock to that edge |
+| Drag far from the edge | Float as a pill |
+| `↑` `↓` + `Enter` | Move through the results and copy the selected one |
+| `Esc` | Cancel the notice / disarm "Quit" / collapse the panel |
+| Logs → *Quit edgePass* | Close the app (two steps; the vault stays as it is) |
 
-## Archivos de Script
+## Script files
 
-- `scripts\edgepass-ingest-form.ps1` - PowerShell wrapper para ingest-form
-- `scripts\edgepass-meter.ps1` - PowerShell wrapper para meter (abre el tab Batch con los datos de un secreto)
-- `scripts\launch-edgepass.ps1` - Lanzar EdgePass
-- `scripts\install-autostart.ps1` - Instalar autostart tras servicio OpenBao
+- `scripts\edgepass-ingest-form.ps1` — PowerShell wrapper for ingest-form
+- `scripts\edgepass-meter.ps1` - PowerShell wrapper for meter (opens the Batch tab with one secret's data)
+- `scripts\edgepass-toggles.ps1` — the header LEDs and `services[]` over the pipe
+- `scripts\launch-edgepass.ps1` — launch edgePass
+- `scripts\install-autostart.ps1` — install autostart after the OpenBao service
 
-## Tipo de Datos: StatusDto
+## Data type: StatusDto
 
 ```typescript
 type StatusDto = {
@@ -504,6 +550,13 @@ type StatusDto = {
     state: string;
     message: string;
   };
+  // The header LEDs (spec + state + docs) and the vocabulary they are written in.
+  toggles: ToggleView[];
+  catalog: ToggleCatalog;
+  // The MCP list with live process state.
+  mcp: McpStatus;
+  // The owner-defined services behind `svc.<id>`.
+  services: ServiceSpec[];
 };
 
 type SealStatus = {
@@ -518,11 +571,11 @@ type SealStatus = {
 };
 ```
 
-## Tipo de Datos: SearchHit
+## Data type: SearchHit
 
 ```typescript
-// Sin `id`: el índice se reescribe en cada sync, así que un rowid podría acabar
-// apuntando a otro secreto. La identidad estable es (namespace, path, key).
+// No `id`: the index is rewritten on every sync, so a rowid could end up
+// pointing at another secret. The stable identity is (namespace, path, key).
 type SearchHit = {
   namespace: string;
   path: string;
@@ -533,13 +586,14 @@ type SearchHit = {
 };
 ```
 
-Al copiar, el frontend manda `{ namespace, path, key }` a `reveal_and_copy`.
+When copying, the frontend sends `{ namespace, path, key }` to
+`reveal_and_copy`.
 
-## Tipo de Datos: SearchReply (respuesta de `op: "search"`)
+## Data type: SearchReply (reply to `op: "search"`)
 
 ```typescript
-// El índice por pipe NO devuelve `score` (es orden interno): devuelve los
-// nombres y el uso, ya ordenados. `namespace` viene como "root" si es el vacío.
+// The pipe index does NOT return `score` (it is internal ordering): it returns
+// the names and usage, already sorted. `namespace` comes as "root" when empty.
 type SearchReply = {
   ok: boolean;
   count: number;
@@ -553,7 +607,7 @@ type SearchReply = {
 };
 ```
 
-## Tipo de Datos: IngestForm
+## Data type: IngestForm
 
 ```typescript
 type IngestForm = {
@@ -567,5 +621,5 @@ type IngestForm = {
 
 ---
 
-**Última actualización**: 2026-09-19  
-**Versión**: 0.1.0
+**Last updated**: 2026-11-06
+**Version**: 0.4.2

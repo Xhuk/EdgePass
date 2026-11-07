@@ -917,7 +917,7 @@ mod tests {
         assert_eq!(
             version_from_mounts(&body, "kv1"),
             MountLookup::Found(KvVersion::V1),
-            "sin options.version el mount es v1 — el caso de vetgroom/vetops/cloudflare"
+            "sin options.version el mount es v1 - el caso de un backend heredado",
         );
         assert_eq!(
             version_from_mounts(&body, "numeric"),

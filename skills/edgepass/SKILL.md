@@ -27,7 +27,7 @@ A named pipe, one JSON object per line, one JSON line back.
 - Windows: `\\.\pipe\edgepass`
 - Operations: `ping`, `status`, `search`, `sync_index`, `meter`, `ingest-form`,
   `run`, `run-status`, `run-wait`, `run-cancel`, `request`, `request-wait`,
-  `unseal`, `seal`, `hold`, `toggles`, `toggle`, `notes`, `note`.
+  `unseal`, `seal`, `hold`, `toggles`, `toggle`, `services`, `notes`, `note`.
 
 ```powershell
 function Invoke-EdgePass {
@@ -88,6 +88,13 @@ retry with an explicit `path`.
 - Arguments never carry the value. If a tool needs a value in a command line, that
   tool is wrong for this job.
 - For long runs use `detach:true` (maximum four) and follow with `run-status`.
+
+## The header LEDs are data
+
+`{"op":"toggles"}` reads the LEDs and the vocabulary (`catalog`); `{"op":"toggle"}`
+fires one. A service the binary does not know about is `services[]` data:
+`{"op":"services","set":[…]}` publishes `svc.<id>`, and a `toggles` row can watch
+it. The full interview and the JSON shapes are in `skills/edgepass-led`.
 
 ## If the widget does not answer
 

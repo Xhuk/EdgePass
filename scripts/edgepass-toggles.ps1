@@ -14,6 +14,8 @@
 #   powershell -File scripts\edgepass-toggles.ps1 -Fire kv              # flip
 #   powershell -File scripts\edgepass-toggles.ps1 -Fire kv -Dir off
 #   powershell -File scripts\edgepass-toggles.ps1 -Set (Get-Content .\toggles.json -Raw)
+#   powershell -File scripts\edgepass-toggles.ps1 -Services
+#   powershell -File scripts\edgepass-toggles.ps1 -SetServices (Get-Content .\services.json -Raw)
 
 param(
   [switch]$List,
@@ -23,6 +25,9 @@ param(
   [string]$Dir = "flip",
   # Full replacement list, as a JSON array of specs.
   [string]$Set = "",
+  # The owner's services: read, or replace the whole list (`services[]`).
+  [switch]$Services,
+  [string]$SetServices = "",
   [string]$PipeName = "edgepass"
 )
 
@@ -30,6 +35,13 @@ $ErrorActionPreference = "Stop"
 
 if ($Fire) {
   $payload = @{ op = "toggle"; id = $Fire.Trim(); dir = $Dir.Trim() }
+} elseif ($SetServices) {
+  # Same contract as -Set: the whole list, validated by Rust.
+  $svcs = $SetServices | ConvertFrom-Json
+  if ($svcs -isnot [array]) { $svcs = @($svcs) }
+  $payload = @{ op = "services"; set = $svcs }
+} elseif ($Services) {
+  $payload = @{ op = "services" }
 } elseif ($Set) {
   # The whole list; Rust validates ids against the catalog and caps the count.
   $specs = $Set | ConvertFrom-Json
@@ -67,6 +79,25 @@ if (-not $reply.ok) {
 
 if ($Fire) {
   Write-Host ("{0} -> {1} · {2}" -f $reply.id, $reply.action, $reply.toast)
+  exit 0
+}
+
+if ($Services -or $SetServices) {
+  Write-Host ("services ({0}/{1}):" -f $reply.services.Count, $reply.max)
+  foreach ($s in $reply.services) {
+    Write-Host ("  {0,-16} {1,-6} probe={2}" -f $s.id, $s.label, $s.probe.kind)
+    if ($s.probe.image) {
+      $match = if ($s.probe.match) { " match=" + $s.probe.match } else { "" }
+      Write-Host ("  {0,-16} image={1}{2}" -f "", $s.probe.image, $match)
+    }
+    if ($s.probe.cmd) { Write-Host ("  {0,-16} cmd={1}" -f "", ($s.probe.cmd -join " ")) }
+  }
+  if ($reply.leds) { Write-Host ("LEDs que las usan: " + ($reply.leds -join ", ")) }
+  Write-Host ""
+  Write-Host "probes svc.*:"
+  foreach ($p in $reply.probes) {
+    Write-Host ("  {0,-18} on={1} off={2}" -f $p.id, $p.on, $p.off)
+  }
   exit 0
 }
 

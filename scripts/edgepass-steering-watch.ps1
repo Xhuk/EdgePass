@@ -57,7 +57,7 @@ $Config = [IO.Path]::GetFullPath($Config)
 
 function Strip-TomlComments([string]$Text) {
     # Los comentarios del toml muestran ejemplos, y uno de ellos es justamente
-    # `#   allow = ["C:\\proyectos\\*"]`. Sin sacarlos, el watcher vigila todo
+    # `#   allow = ["C:\\projects\\*"]`. Sin sacarlos, el watcher vigila todo
     # C:\proyectos, que es lo contrario de lo que la lista decide.
     $out = New-Object Text.StringBuilder
     $inString = $false

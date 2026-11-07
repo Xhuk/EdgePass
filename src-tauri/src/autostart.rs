@@ -1,10 +1,11 @@
 //! edgePass "autostart": Scheduled Task at user logon (not a Windows Service).
 //!
-//! GUI apps cannot live in Session 0. We wait for the OpenBao service, then
-//! launch the widget once — same contract as `scripts/install-autostart.ps1`.
+//! GUI apps cannot live in Session 0. The task runs the exe directly (native
+//! action, no PowerShell wrapper) with an 8 s delay for the logon burst; a vault
+//! that is still starting is a state the widget renders, not something to wait
+//! for here.
 
 use serde::Serialize;
-use std::fs;
 
 use crate::winservice::run_hidden;
 
@@ -49,52 +50,26 @@ pub fn install() -> Result<AutostartStatusDto, String> {
         return Err(format!("exe missing: {}", exe.display()));
     }
     let exe_s = exe.display().to_string();
-
-    let data = dirs::data_dir()
-        .ok_or_else(|| "no data dir".to_string())?
-        .join("edgePass");
-    fs::create_dir_all(&data).map_err(|e| e.to_string())?;
-    let wrapper = data.join("start-with-openbao.ps1");
-
     let exe_ps = exe_s.replace('\'', "''");
-    let script = format!(
-        r#"$ErrorActionPreference = "SilentlyContinue"
-$log = Join-Path $env:LOCALAPPDATA "edgePass\autostart.log"
-function Write-Log($m) {{ "$(Get-Date -Format s) $m" | Out-File -FilePath $log -Append -Encoding UTF8 }}
 
-for ($i = 0; $i -lt 30; $i++) {{
-  $svc = Get-Service -Name OpenBao -ErrorAction SilentlyContinue
-  if ($svc -and $svc.Status -eq "Running") {{ break }}
-  Start-Sleep -Seconds 2
-}}
-Start-Sleep -Seconds 2
-
-if (Get-Process -Name "edgepass" -ErrorAction SilentlyContinue) {{
-  Write-Log "edgePass ya estaba en ejecucion; no se lanza otra instancia"
-  exit 0
-}}
-Write-Log "lanzando edgePass"
-Start-Process -FilePath '{exe_ps}'
-"#
-    );
-    fs::write(&wrapper, script).map_err(|e| format!("write wrapper: {e}"))?;
-
-    let wrapper_s = wrapper.display().to_string().replace('\'', "''");
+    // A native task action, not a PowerShell wrapper: fewer moving parts, no
+    // `-ExecutionPolicy Bypass` for AV to flag, and the path Scoop exposes
+    // (`...\apps\edgepass\current\edgepass.exe`) stays valid across updates.
+    // The 8 s delay is for the logon burst, not for OpenBao: a vault that is
+    // still starting is a state the widget already renders ("OpenBao offline"
+    // plus the Svc button), so waiting for it here was not load-bearing.
     let ps = format!(
         r#"$ErrorActionPreference = 'Stop'
-$arg = '-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{wrapper_s}"'
-$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument $arg
+$action = New-ScheduledTaskAction -Execute '{exe_ps}'
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+$trigger.Delay = 'PT8S'
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero)
 Register-ScheduledTask -TaskName '{TASK_NAME}' -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
 'OK'
 "#
     );
 
-    let out = run_hidden(
-        "powershell.exe",
-        &["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", &ps],
-    )?;
+    let out = run_hidden("powershell.exe", &["-NoProfile", "-Command", &ps])?;
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr);
         let stdout = String::from_utf8_lossy(&out.stdout);
@@ -110,7 +85,7 @@ Register-ScheduledTask -TaskName '{TASK_NAME}' -Action $action -Trigger $trigger
         installed: true,
         task_name: TASK_NAME.into(),
         exe: exe_s,
-        message: format!("OK · arranca al logon (espera OpenBao) · {TASK_NAME}"),
+        message: format!("OK · arranca al logon · {TASK_NAME}"),
     })
 }
 

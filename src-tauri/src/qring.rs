@@ -18,7 +18,12 @@ use std::time::Duration;
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-const DEFAULT_PACK: &str = r"C:\proyectos\hermes-q-ring-pack";
+/// The pack only exists where the user points at it (`qringPack` in config or
+/// `EDGEPASS_QRING_PACK`). An empty value means the integration is off; the
+/// LED says so instead of guessing a path that belongs to another machine.
+fn unconfigured_msg() -> String {
+    "pack de Q-ring no configurado (qringPack en la config o EDGEPASS_QRING_PACK)".into()
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -80,7 +85,7 @@ fn resolve_pack(raw: &str) -> PathBuf {
             return PathBuf::from(e);
         }
     }
-    PathBuf::from(DEFAULT_PACK)
+    PathBuf::new()
 }
 
 fn resolve_host(raw: &str, pack: &Path) -> PathBuf {
@@ -113,7 +118,9 @@ pub fn status(pack_cfg: &str, host_cfg: &str) -> QringStatusDto {
     let pack_ok = pack.join("qring.py").is_file();
     let pid = read_runtime_pid(&host).filter(|p| pid_alive(*p));
     let running = qringd_process_alive() || pid.is_some();
-    let message = if !pack_ok {
+    let message = if pack.as_os_str().is_empty() {
+        unconfigured_msg()
+    } else if !pack_ok {
         format!("pack missing: {}", pack.display())
     } else if running {
         match pid {
@@ -137,6 +144,9 @@ pub fn status(pack_cfg: &str, host_cfg: &str) -> QringStatusDto {
 pub fn control(pack_cfg: &str, host_cfg: &str, action: &str) -> Result<QringControlDto, String> {
     let action = action.trim().to_ascii_lowercase();
     let (pack, host) = paths_from_config(pack_cfg, host_cfg);
+    if pack.as_os_str().is_empty() {
+        return Err(unconfigured_msg());
+    }
     if !pack.join("qring.py").is_file() {
         return Err(format!("Q-ring pack not found: {}", pack.display()));
     }
@@ -264,7 +274,7 @@ fn summarize_cli(op: &str, out: &CliOut) -> String {
             last.to_string()
         }
     } else if out.code == 2 {
-        // Token / reasonix pointer needed — surface the last QRING_* line.
+        // Token / more setup needed — surface the last QRING_* line.
         if last.is_empty() {
             format!("{op} needs setup (exit 2)")
         } else {
@@ -478,5 +488,25 @@ mod tests {
             policy_after_stop(&already_off).is_none(),
             "sin nada que apagar no hay escritura"
         );
+    }
+
+    #[test]
+    fn an_unconfigured_pack_refuses_with_a_useful_message() {
+        // Sin pack declarado, ni el LED ni el click deben adivinar una ruta.
+        let cfg = AppConfig::default();
+        let st = status(&cfg.qring_pack, &cfg.qring_host);
+        assert!(!st.pack_ok, "sin pack no puede estar ok");
+        assert!(
+            st.message.contains("no configurado"),
+            "mensaje con el cómo: {}",
+            st.message
+        );
+        assert!(
+            !st.message.contains(r"\proyectos"),
+            "nada del binario pierde una ruta de otra máquina: {}",
+            st.message
+        );
+        let err = control(&cfg.qring_pack, &cfg.qring_host, "on").expect_err("sin pack");
+        assert!(err.contains("no configurado"), "{err}");
     }
 }

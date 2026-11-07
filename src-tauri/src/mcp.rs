@@ -10,7 +10,7 @@
 //! hand is seen instead of being started twice.
 //!
 //! A row may also name a **Cloudflare named tunnel** (`tunnel`). That is the
-//! missing half of "the server is up but nobody can reach it": `reasonixmcp`
+//! missing half of "the server is up but nobody can reach it": `my-api`
 //! listens on `127.0.0.1:8788` and `cloudflared tunnel run edgepass-mcp` is what
 //! puts it on `https://mcp.networkvoid.xyz`. The tunnel is supervised exactly
 //! like the server — started with it, stopped with it, `autostart` included —
@@ -20,7 +20,7 @@
 //! Two things are deliberately narrow:
 //!
 //! - **No secrets here.** `env` is for non-secret values (flags, paths). A
-//!   server that needs a credential reads it itself — `reasonixmcp` reads its
+//!   server that needs a credential reads it itself — `my-api` reads its
 //!   gate secret from its own state dir — so nothing sensitive is written to
 //!   `config.json`, which is the same rule the rest of the widget follows.
 //! - **Stopping never sprays.** A child edgePass spawned is killed by pid. A
@@ -126,7 +126,7 @@ pub struct McpServer {
     #[serde(default)]
     pub clients: Vec<String>,
     /// Optional command that mints a client credential (for example
-    /// `reasonixmcp -register-client -redirect …`). edgePass runs it on demand
+    /// `my-api -register-client -redirect …`). edgePass runs it on demand
     /// and shows what it printed, because only the *server* can issue a valid
     /// client id — the widget cannot invent one.
     #[serde(default)]
@@ -190,6 +190,9 @@ pub struct ServerView {
     /// leaves the vault.
     pub env_keys: Vec<String>,
     pub secret_env_keys: Vec<String>,
+    /// Missing server binary or missing `cloudflared`: a fix, not a click. The
+    /// per-server LED paints this amber; a stopped process is just off.
+    pub broken: bool,
 }
 
 /// Path the MCP endpoint answers on, with a leading slash.
@@ -275,7 +278,7 @@ pub const MAX_CREDENTIAL_OUTPUT: usize = 4096;
 /// Only the *server* can mint a valid client id — the widget cannot invent one —
 /// so this runs the command the row declares and hands back its output for
 /// copying. It goes through a shell (`cmd /C`, `sh -c`) because a config field
-/// like `reasonixmcp -register-client -redirect …` is meant to read the way you
+/// like `my-api -register-client -redirect …` is meant to read the way you
 /// would type it; it is config data, exactly as trusted as `command`.
 pub fn run_credential_command(cfg: &AppConfig, id: &str) -> Result<String, String> {
     let s = find(cfg, id)?;
@@ -552,10 +555,15 @@ fn view_of(s: &McpServer, running: bool, detail: String, tunnel_running: bool) -
     let mut spec = s.clone();
     spec.label = label_for(&s.label, &s.id);
     spec.path = path_of(s);
+    // The two ways a row needs a fix instead of a click. Computed here, from
+    // the same `detail` the panel reads, so a per-row LED cannot disagree with
+    // the aggregate one.
+    let broken = detail.starts_with("falta el binario") || detail.contains("falta cloudflared");
     ServerView {
         spec,
         running,
         detail,
+        broken,
         tunnel_running,
         url: connection_url(s),
         watched_image: image_of(s),
@@ -1051,6 +1059,47 @@ fn read_one(s: &McpServer) -> (bool, String) {
     }
 }
 
+/// One row as the LED model needs it: up, needs-a-fix, and the tooltip line.
+///
+/// Reads through [`status`], the 10 s cache the aggregate LED already pays for,
+/// so a per-server LED adds no `tasklist` of its own.
+pub fn server_state(cfg: &AppConfig, id: &str) -> Option<(bool, bool, String)> {
+    let status = status(cfg);
+    let row = status.servers.iter().find(|v| v.spec.id == id)?;
+    Some((row.running, row.broken, row.detail.clone()))
+}
+
+/// Who owns the process behind one row: `managed` when this widget holds the
+/// child, `external` when the image is alive and we do not, `down` otherwise.
+///
+/// Reported, never configured — and never guessed from the image alone, which
+/// is why `holds_child` asks the child map first.
+pub fn origin_of(cfg: &AppConfig, id: &str) -> Option<crate::services::Origin> {
+    let status = status(cfg);
+    let row = status.servers.iter().find(|v| v.spec.id == id)?;
+    if !row.running {
+        return Some(crate::services::Origin::Down);
+    }
+    Some(if holds_child(id) {
+        crate::services::Origin::Managed
+    } else {
+        crate::services::Origin::External
+    })
+}
+
+/// `true` when the child map still holds a live handle for this key. Cheap: a
+/// mutex and a `try_wait`, no process list.
+fn holds_child(key: &str) -> bool {
+    let mut guard = CHILDREN.lock().unwrap_or_else(|e| e.into_inner());
+    match guard.as_mut() {
+        Some(map) => match map.get_mut(key) {
+            Some(child) => matches!(child.try_wait(), Ok(None)),
+            None => false,
+        },
+        None => false,
+    }
+}
+
 /// Whether the command can be run at all: an absolute path must exist, a bare
 /// name just has to be non-empty (it may live on `PATH`).
 fn binary_present(s: &McpServer) -> bool {
@@ -1322,7 +1371,7 @@ fn quiet(cmd: &mut Command) {
 // edgePass is a widget: a child it spawns inherits no console, so its output
 // goes nowhere unless we send it somewhere — and a server that dies on startup
 // (port taken, bad config) then leaves *nothing* behind. That is exactly how a
-// dead `reasonixmcp` looked "arrancado (pid 30432)" in the log with an empty port
+// dead `my-api` looked "arrancado (pid 30432)" in the log with an empty port
 // ten minutes later. Two cheap pieces answer "why": a per-row log file, and the
 // exit code of the last child we held.
 
@@ -1426,9 +1475,9 @@ mod tests {
 
     #[test]
     fn validate_fills_ids_and_labels_and_refuses_a_missing_command() {
-        let out = validate(vec![spec("", r"C:\tools\reasonixmcp.exe")]).unwrap();
-        assert_eq!(out[0].id, "reasonixmcp");
-        assert_eq!(out[0].label, "reasonixmcp");
+        let out = validate(vec![spec("", r"C:\tools\my-api.exe")]).unwrap();
+        assert_eq!(out[0].id, "my-api");
+        assert_eq!(out[0].label, "my-api");
         assert!(validate(vec![spec("x", "   ")]).is_err());
     }
 
@@ -1449,7 +1498,7 @@ mod tests {
 
     #[test]
     fn image_defaults_to_the_command_file_name() {
-        assert_eq!(image_of(&spec("a", r"C:\tools\reasonixmcp.exe")), "reasonixmcp.exe");
+        assert_eq!(image_of(&spec("a", r"C:\tools\my-api.exe")), "my-api.exe");
         assert_eq!(image_of(&spec("a", "my-server")), "my-server.exe");
         assert_eq!(image_of(&spec("a", "MY-SERVER.EXE")), "my-server.exe");
         let mut explicit = spec("a", "node");
@@ -1464,7 +1513,7 @@ mod tests {
         for image in ["node.exe", "python.exe", "cmd.exe", "pwsh.exe"] {
             assert!(is_generic_image(image), "{image} should be treated as generic");
         }
-        assert!(!is_generic_image("reasonixmcp.exe"));
+        assert!(!is_generic_image("my-api.exe"));
     }
 
     #[test]
@@ -1501,7 +1550,7 @@ mod tests {
 
     #[test]
     fn the_path_defaults_to_mcp_and_the_url_is_origin_plus_path() {
-        let mut s = spec("reasonixmcp", r"C:\tools\reasonixmcp.exe");
+        let mut s = spec("my-api", r"C:\tools\my-api.exe");
         assert_eq!(path_of(&s), "/mcp");
         assert_eq!(connection_url(&s), "", "no public origin, no link to offer");
 
@@ -1655,7 +1704,7 @@ mod tests {
         // The chain is only as reachable as its weakest link: a green LED over
         // an origin nobody can reach is the lie this probe exists to avoid.
         let exe = std::env::current_exe().unwrap();
-        let mut s = spec("reasonixmcp", &exe.to_string_lossy());
+        let mut s = spec("my-api", &exe.to_string_lossy());
         s.tunnel = "edgepass-mcp".into();
         let cfg = AppConfig {
             mcp_servers: validate(vec![s]).unwrap(),
@@ -1681,8 +1730,8 @@ mod tests {
 
     #[test]
     fn the_connector_has_its_own_key_so_a_stop_never_mixes_them() {
-        let s = spec("reasonixmcp", "r.exe");
-        assert_eq!(tunnel_key(&s), "reasonixmcp#tunnel");
+        let s = spec("my-api", "r.exe");
+        assert_eq!(tunnel_key(&s), "my-api#tunnel");
         assert_ne!(tunnel_key(&s), s.id);
     }
 
@@ -1717,10 +1766,10 @@ mod tests {
 
     #[test]
     fn each_child_gets_its_own_log_name() {
-        assert_eq!(server_log_name(&spec("reasonixmcp", "r.exe")), "mcp-reasonixmcp.log");
+        assert_eq!(server_log_name(&spec("my-api", "r.exe")), "mcp-my-api.log");
         assert_eq!(
-            tunnel_log_name(&spec("reasonixmcp", "r.exe")),
-            "cloudflared-reasonixmcp.log"
+            tunnel_log_name(&spec("my-api", "r.exe")),
+            "cloudflared-my-api.log"
         );
     }
 }

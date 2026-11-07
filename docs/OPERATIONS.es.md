@@ -27,7 +27,7 @@ Antes de tocar nada, abre el tab **Logs**: dice qué binario está corriendo, co
 build, qué versión de WebView2 hay, dónde están el config, la base y el **log**, y las últimas
 líneas de ese log. El botón *Copiar informe* lo deja en el portapapeles listo para pegar.
 
-- Log: `%APPDATA%\edgePass\logs\edgepass.log` (rota a `.1` a los 512 KB).
+- Log: `%LOCALAPPDATA%\edgePass\logs\edgepass.log` (rota a `.1` a los 4 MB).
 - Los errores de arranque y los panics también van ahí: en release no hay consola.
 
 ## LLM → formulario de secretos
@@ -71,7 +71,7 @@ un path, y el widget lo lee con su token y abre el tab **Batch** con las filas y
 ```
 
 ```json
-{"op":"meter","namespace":"dokploy","path":"projects/lotly/demo-users"}
+{"op":"meter","namespace":"prod","path":"projects/app/users"}
 ```
 
 ```powershell
@@ -132,7 +132,7 @@ persiste**: guardar desde la UI escribe lo que está en pantalla, no el valor fo
   de la pantalla—; para desanclarla hay que tirar más de 96 px hacia dentro.
 - **Recuerda dónde quedó**: borde y altura si está anclada, o su sitio si flota, y el siguiente
   arranque abre exactamente ahí (no en el sitio por defecto del sistema). Se guarda en
-  `%APPDATA%\edgePass\placement.json` **relativo al monitor**, así que un cambio de resolución o
+  `%LOCALAPPDATA%\edgePass\placement.json` **relativo al monitor**, así que un cambio de resolución o
   de DPI mueve la pastilla con la pantalla en vez de dejarla fuera de vista; si la pantalla donde
   vivía ya no está, vuelve al monitor principal.
 - **Salir**: tab **Logs** → *Salir de edgePass* (dos pasos; `Esc` cancela el primero). El
@@ -214,10 +214,36 @@ click se resuelve en Rust desde `config.json`.
 
 OpenBao corre **por su cuenta** como servicio de Windows (`OpenBao`, NSSM). edgePass es el
 **cliente**: se conecta, desbloquea al usar y solo sella si tú lo pides. El autostart solo
-lanza el widget una vez al logon (espera a que el servicio esté arriba, no lo gestiona ni lo
-relanza: si el widget ya corre, no abre otra instancia).
+lanza el widget una vez al logon, con una tarea programada nativa (sin wrapper de
+PowerShell ni `-ExecutionPolicy Bypass`) y 8 s de retardo para la ráfaga del logon. No
+espera a OpenBao: si el vault todavía no está, el widget lo dice y ofrece el botón Svc.
 
 ```powershell
 powershell -File scripts\install-autostart.ps1
-# log del wrapper: %LOCALAPPDATA%\edgePass\autostart.log
+powershell -File scripts\install-autostart.ps1 -Remove
 ```
+
+## Instalaciones y reinicios: siempre avisar
+
+Una instalacion del producto **mata el proceso que esta sirviendo el vault**. Paso el
+6 de noviembre: una instalacion silenciosa del 0.4.0 cerro el widget a las 11:10:49 sin
+cierre ordenado y dejo el pipe sin servicio. Reel lo descubrio porque estaba por grabar.
+
+Reglas:
+
+1. **Ninguna instalacion sin aviso.** Un instalador que mata el proceso que sirve el
+   vault es un corte de servicio, aunque dure tres minutos.
+2. **Antes de instalar, cerra el widget de forma ordenada** y decilo. Si el proceso
+   muere por el instalador, el log no registra cierre y parece una caida.
+3. **Despues de instalar, verifica en una llamada aparte**: `ping` con la version
+   esperada y el proceso apuntando al exe que instalaste (instalador:
+   `%LOCALAPPDATA%\edgePass\edgepass.exe`; Scoop: `…\scoop\apps\edgepass\current`).
+4. Si el proceso no arranca, `Start-ScheduledTask -TaskName edgePass` y volve a
+   verificar. Nunca `Start-Process`: el job del shell lo mata al cerrarse.
+
+## Watchdog del widget
+
+No hay watchdog automático: la tarea `edgePass` corre **una vez al logon**
+(`MultipleInstances = IgnoreNew`). Relanzar cada N minutos se probó y se quitó:
+un widget que murió vuelve con `Start-ScheduledTask -TaskName edgePass`, y la
+instancia única rechaza el segundo proceso antes de abrir el pipe.

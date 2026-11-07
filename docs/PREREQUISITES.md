@@ -3,6 +3,19 @@
 edgePass is a console. The vault is the product. You must have a local OpenBao
 before the widget is useful.
 
+## 0. Windows runtime
+
+The UI is a WebView2 host. Windows 11 ships the Evergreen Runtime; on Windows 10
+install the **Microsoft Edge WebView2 Runtime** first:
+
+https://developer.microsoft.com/microsoft-edge/webview2/
+
+Without it the portable `.exe` (the Scoop install) does not open. The NSIS
+installer bundles the bootstrapper; Scoop cannot.
+
+If you install through Scoop, quit the widget before `scoop update edgepass`:
+Windows cannot replace a running executable.
+
 ## 1. OpenBao
 
 Install OpenBao 2.x and run it as a local service. It must listen on loopback.

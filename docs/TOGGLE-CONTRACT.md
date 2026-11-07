@@ -34,10 +34,11 @@ and the pipe, so both take the same path):
 
 | Rule | Why |
 |---|---|
-| at most **6** LEDs (`catalog.maxToggles`) | the header is one row in a 460 px window |
-| label 1-4 chars, uppercased | with five 4-char LEDs the row still fits the 410 px bar next to the grip and the `edgePass` label |
+| at most **8** LEDs (`catalog.maxToggles`) | the header is one row; the collapsed pill grows with the LEDs it has (`floatCollapsedWidth`) and never wraps |
+| label 1-4 chars, uppercased | eight 4-char LEDs still fit the widened pill next to the grip and the `edgePass` label |
 | `probe` / `on` / `off` / `alt` must exist in the catalog | a spec that names nothing cannot light up or do anything |
 | ids unique (auto-suffixed `-2`, `-3`…) | a click addresses one LED |
+| `on` / `off` may be empty | a read-only light (a service with no actions) is a valid LED |
 | an empty list is valid | "no LEDs" is a real choice, not an error |
 
 An unknown id is refused **with the catalog in the reply**, so a caller can fix
@@ -61,6 +62,14 @@ buttons.
 | `skills.sync` | the skill library is in sync (drift 0) | drift > 0, or the syncer is missing | the `skills_sync.py` script is where the config says |
 | `skills.watch` | the hub watcher is running | never | the script is there |
 | `mcp.servers` | every row of `mcpServers[]` is running **and** every named tunnel a row declares is connected | a row's binary is missing, or `cloudflared` is missing | the list is not empty |
+| `mcp.<id>` *(derived)* | that one MCP row is running and its tunnel (if declared) is connected | that row's binary or `cloudflared` is missing | the row exists |
+| `svc.<id>` *(derived)* | the service's `process`/`cmd` probe says on | the probe itself failed (missing binary, timeout, unexpected exit) | always; a read-only service still reports `live:false` in the view |
+
+The two derived families exist only if the config does: one `svc.<id>` per
+`services[]` row, one `mcp.<id>` per `mcpServers[]` row. They are the whole
+extension point — the exe stays immutable, the inventory grows. `origin`
+(`managed` / `external` / `down`) rides on the view for them: only an MCP row can
+answer `managed`, because only edgePass spawns one.
 
 A probe returns four bits plus the tooltip detail: `on`, `warn`, `ask` (a gateway
 Allow is pending) and `live`. Probes never leave the process; only the vault's
@@ -94,6 +103,8 @@ chip in the header is not a LED.
 | `mcp.on` | only if a row declares `secretEnv` | start every server of `mcpServers[]` **and** the named Cloudflare tunnel each row declares (`tunnel`) — idempotent |
 | `mcp.off` | no | stop the servers and their connectors. Our own children by pid; a connector started by hand by pid matched on `tunnel run <name>`, never by image |
 | `mcp.restart` | only if a row declares `secretEnv` | stop then start the whole chain (the LED's `alt`) |
+| `svc.<id>.on` / `.off` *(derived)* | no | run exactly the command the service declared in `actions.on` / `.off`. Never synthesised: this module does not kill by image |
+| `mcp.<id>.on` / `.off` / `.restart` *(derived)* | only if **that** row declares `secretEnv` | the same three operations, scoped to one server and its tunnel |
 
 Gestures in the header: **click = flip** (the backend picks `on`/`off` from what
 the probe sees right now), **Ctrl / Cmd / Alt / Shift-click or right click =
@@ -123,8 +134,8 @@ leaves Docker Desktop's other stacks alone.
 //                "off":"vault.seal","state":{"on":true,"warn":false,"ask":false,
 //                "live":true,"detail":"…"},
 //                "docs":{"probe":"…","on":"…","off":"…"}}],
-//  "catalog":{"maxToggles":6,"maxLabelChars":4,"probes":[…],"actions":[…]},
-//    "max":5}
+//  "catalog":{"maxToggles":8,"maxLabelChars":4,"probes":[…],"actions":[…]},
+//    "max":8}
 
 // write: replace the whole list (validated; the reply echoes the stored list)
 {"op":"toggles","set":[{"id":"kv","label":"KV","probe":"vault.seal",
@@ -133,6 +144,11 @@ leaves Docker Desktop's other stacks alone.
 // fire one LED — the same thing a click does
 {"op":"toggle","id":"kv","dir":"flip"}   // flip | on | off | alt
 // → {"ok":true,"id":"kv","action":"vault.unseal","detail":"…","toast":"Vault abierto"}
+
+// the owner's services: read (services + their svc.* catalog half + the LEDs
+// already pointing at them) or replace the whole list
+{"op":"services"}
+{"op":"services","set":[{"id":"mi-api","label":"API","probe":{"kind":"process","image":"mi-api.exe"}}]}
 ```
 
 `{"op":"status"}` also carries `toggles`, so a single call shows the vault, the
@@ -145,13 +161,15 @@ a LED does not own.
 
 ### The webview
 
-`get_status` → `StatusDto.toggles[]` (spec + `state` + `docs`) and
-`StatusDto.catalog`. A click calls the `fire_toggle` command with
-`{id, dir}`, and the toast is the action's own `toast`.
+`get_status` → `StatusDto.toggles[]` (spec + `state` + `docs`), `StatusDto.catalog`
+and `StatusDto.services[]` (the raw inventory the Servicios editor edits). A click
+calls the `fire_toggle` command with `{id, dir}`, and the toast is the action's
+own `toast`.
 
 ## 4. Wiring a LED to OpenBao (or another Vault-compatible KV)
 
-The seal/unseal pair is the canonical example, and it is what ships as `KV`:
+The seal/unseal pair is the canonical example, and it is what ships as `KV` (OpenBao
+is a prerequisite, so the vault is the one light every install has something behind):
 
 | Spec side | OpenBao API | Notes |
 |---|---|---|
@@ -171,12 +189,17 @@ this is a *built-in* registry rather than a free-form HTTP field today:
 
 ### Adding a new kind of LED
 
-A *new* probe or action is one entry in `src-tauri/src/toggles.rs` plus its arm
-in `probe_state` / `run_action`:
+Most of the time you do **not** touch Rust: the service is data
+(`services[]` → `svc.<id>`), and the skill `skills/edgepass-led` walks the
+interview and the JSON. The Rust path is for a new *kind* of probe or action —
+one that every install could use:
+
+A *new* probe or action is one entry in `RAW_PROBES` / `RAW_ACTIONS` in
+`src-tauri/src/toggles.rs` plus its arm in `probe_state` / `run_action`:
 
 ```rust
-ProbeInfo { id: "vault.seal", doc: "…", needs_qring: false,
-            on: "vault.unseal", off: "vault.seal", alt: None },
+RawProbe { id: "vault.seal", doc: "…", needs_qring: false,
+           needs_gha: false, on: "vault.unseal", off: "vault.seal", alt: None },
 ```
 
 and `cargo test` keeps the table and the arms in step (`every_table_entry_resolves`,
@@ -197,7 +220,7 @@ of that contract, and the ids are already shaped like it.
 
 | Install | LEDs |
 |---|---|
-| fresh (no `config.json` yet) | `KV` only — edgePass's only guaranteed backend is a vault |
+| fresh (no `config.json` yet) | `KV` only — OpenBao is a prerequisite, so the vault is the one light every install has something behind. Everything else is opt-in |
 | upgrading from a pre-`toggles` config | `KV`, `QR`, `GOV`, `GW` — the three the header hardcoded, with `GW` (the Q-ring process) moved to `QR` and handed its new job. The v3→v4 migration does it once, and only for the *stock* spec: a header edited by hand stays as it is |
 
 `GW`/`QR`/`GOV` are one `＋ Agregar un toggle` away in Ajustes (probes `gha.runner` /
@@ -207,7 +230,7 @@ everything applies on **Guardar**.
 
 `SYNC`/`AUTO` (probes `skills.sync` / `skills.watch`) are the same deal: opt-in rows.
 They stay out of the shipped defaults on purpose — they point at
-`C:\proyectos\skills-sync\skills_sync.py`, a path that only exists on a machine that
+`C:\tools\skills-sync\skills_sync.py`, a path that only exists on a machine that
 has that tool (override it with `EDGEPASS_SKILLS_SYNC`). One row each:
 
 ```jsonc

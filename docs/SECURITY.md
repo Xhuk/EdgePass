@@ -1,75 +1,98 @@
-# Seguridad de edgePass
+# edgePass security
 
-Estado: revisión hecha el 6 de noviembre de 2026, sobre la versión 0.3.0.
-Este documento dice qué protege la app, qué se arregló en 0.3.1 y qué queda abierto.
+Status: review done on 6 November 2026, re-checked for 0.5.0. This document says
+what the app protects, what was fixed, and what is still open.
 
-## Modelo de confianza
+## Trust model
 
-edgePass no escucha en la red. No hay puerto, ni servidor, ni API remota.
+edgePass does not listen on the network. There is no port, no server, no remote API.
 
-Hay dos superficies:
+There are two surfaces:
 
-1. **El pipe local** (`\\.\pipe\edgepass`). Cualquier proceso de tu mismo usuario puede abrirlo y mandar JSON.
-2. **El vault**. La app habla solo con OpenBao en loopback (`127.0.0.1`, `::1`, `localhost`).
+1. **The local pipe** (`\\.\pipe\edgepass`). Any process running as your user can
+   open it and send JSON.
+2. **The vault**. The app only talks to OpenBao on loopback (`127.0.0.1`, `::1`,
+   `localhost`).
 
-La frontera de seguridad es entonces **"cualquier proceso del mismo usuario"**, no un atacante remoto.
-Un proceso que corre con tu cuenta ya puede leer el archivo de configuración y tus archivos.
-El objetivo de la app es más chico y más útil: que el token del vault no salga de la máquina,
-y que el pipe no sea un camino más corto que el propio sistema operativo.
+The security boundary is therefore **"any process of the same user"**, not a
+remote attacker. A process running under your account can already read the config
+file and your files. The app's goal is smaller and more useful: keep the vault
+token on the machine, and make the pipe no shorter a path than the operating
+system itself.
 
-## Lo que se arregló en 0.3.1
+## Fixed in 0.3.1
 
-### Alto: salida del path declarado
+### High: escaping the declared path
 
-`net::join_url` concatenaba el path relativo sin mirar qué contenía. El intérprete de URL
-normaliza `..`, así que la ruta se escapaba del path que el cliente declaraba.
+`net::join_url` concatenated the relative path without looking at what it
+contained. The URL parser normalises `..`, so the path escaped the one the client
+declared.
 
-Prueba que mostró el fallo, antes del arreglo:
+The test that showed the flaw, before the fix:
 
 ```
-{"op":"run","entries":[{"namespace":"vetgroom","path":"surfaces/demo-runtime/../saas-runtime"}],"keys":["ADMIN_KEY"]}
+{"op":"run","entries":[{"namespace":"demo","path":"surfaces/demo-runtime/../saas-runtime"}],"keys":["ADMIN_KEY"]}
 → {"code":0,"env":["ADMIN_KEY"],"ok":true}
 ```
 
-El cliente pidió un path y leyó otro. `meter` con `../sys/health` respondía `ok:true`.
+The client asked for one path and read another. `meter` with `../sys/health`
+answered `ok:true`.
 
-Ahora `join_url` valida cada segmento antes de armarlo. Rechaza `.`, `..`, `/`, `\`, `?`,
-`#` y caracteres de control. La comprobación corre sobre la forma decodificada, así que
-`%2e%2e` y `%2f` caen igual que `..` y `/`. Un nombre de clave normal pasa sin cambios.
+`join_url` now validates every segment before building it. It rejects `.`, `..`,
+`/`, `\`, `?`, `#` and control characters. The check runs on the decoded form, so
+`%2e%2e` and `%2f` fail like `..` and `/`. A normal key name passes unchanged.
 
-El mismo camino se usa para escribir y para borrar, así que el arreglo cubre los tres.
+The same path is used for writing and deleting, so the fix covers all three.
 
-### Medio: el token podía seguir un redirect
+### Medium: the token could follow a redirect
 
-El cliente HTTP seguía redirects. `X-Vault-Token` es un header propio, y un header propio
-no se borra al cambiar de host. Algo que respondiera en `127.0.0.1:8200` podía redirigir
-el token a un sitio externo. Ahora el cliente usa `redirect(Policy::none())`.
+The HTTP client followed redirects. `X-Vault-Token` is a custom header, and a
+custom header is not dropped when the host changes. Something answering on
+`127.0.0.1:8200` could redirect the token to an external site. The client now uses
+`redirect(Policy::none())`.
 
-## Lo que queda abierto
+## Fixed in 0.5.0
 
-| Severidad | Hallazgo | Dónde |
+- **CSP.** `tauri.conf.json` used `"csp": null`; the webview that handles secrets
+  had no policy. It now sets `default-src 'self'`, `script-src 'self'`, and only
+  the Tauri IPC origin in `connect-src` (with a separate `devCsp` for Vite).
+- **Scoop lifecycle.** `post_uninstall` in the manifest unregisters the logon task
+  and deletes the keychain entry, so an uninstall no longer leaves a task pointing
+  at a deleted binary or a vault token behind.
+- **Authenticode.** The portable exe is signed with the project certificate
+  (`CN=Firma Instalador`, self-signed) and timestamped. That detects tampering but
+  does not remove SmartScreen warnings on machines that do not trust the root; a
+  public CA certificate is the remaining step for that.
+
+## What is still open
+
+| Severity | Finding | Where |
 |---|---|---|
-| Medio | Sin CSP y sin carpeta `capabilities/` de Tauri | `tauri.conf.json` |
-| Medio | `{"op":"seal"}` no pide confirmación a ningún humano | `ipc.rs` |
-| Bajo | Los errores reenvían JSON del vault con `request_id` y `warnings` | `ipc.rs` |
-| Bajo | `localhost` se acepta por nombre: un `hosts` envenenado redirige el token | `net.rs` |
-| Info | `cmd /C` sobre `credential_command`; ningún op del pipe escribe configuración | `mcp.rs` |
+| Medium | `{"op":"seal"}` asks no human for confirmation | `ipc.rs` |
+| Low | Errors forward vault JSON including `request_id` and `warnings` | `ipc.rs` |
+| Low | `localhost` is accepted by name: a poisoned `hosts` file redirects the token | `net.rs` |
+| Info | `cmd /C` over `credential_command`; no pipe op writes configuration | `mcp.rs` |
 
-El hallazgo de `seal` es de disponibilidad, no de confidencialidad. Un proceso del mismo
-usuario puede sellar el vault y cortar a todos sus consumidores. No hay cuenta privilegiada
-que lo impida.
+The `seal` finding is availability, not confidentiality. A process of the same
+user can seal the vault and cut off every consumer. There is no privileged account
+to prevent it.
 
-## Lo que está bien y se midió
+## What is right, and was measured
 
-- `run` pasa el comando por argv, sin shell. El JSON no puede inyectar comandos.
-- El pipe resiste JSON roto, una op desconocida y una query de 20 KB.
-- `npm audit` da cero vulnerabilidades.
-- El frontend no usa `dangerouslySetInnerHTML`.
-- El loopback se aplica antes de construir el cliente y el proxy está desactivado.
-- El token vive en el keychain del sistema, no en disco.
-- El reply de `run` devuelve nombres de variables, nunca valores.
+- `run` passes the command through argv, with no shell. JSON cannot inject commands.
+- The pipe survives broken JSON, an unknown op, and a 20 KB query.
+- `npm audit` reports zero vulnerabilities.
+- The frontend does not use `dangerouslySetInnerHTML`.
+- Loopback is enforced before the client is built, and the proxy is disabled.
+- The token lives in the OS keychain, not on disk.
+- `run` replies with variable names, never values.
+- A service probe's `cmd` runs only when a `svc.<id>` LED exists, and its stdout
+  is capped and dropped when it looks like a credential.
+- Passphrases: every word, digit, symbol and random-block character comes from
+  the OS CSPRNG, one fresh draw each. The per-install salt is public and only
+  rotates the mapping between machines; it adds no entropy and is not a pepper.
 
-## Si encontrás un secreto expuesto
+## If you find an exposed secret
 
-Avisá a la persona dueña del repo. El valor no se copia al chat, al issue ni al informe.
-Se rota, y la rotación es la contención.
+Tell the repository owner. The value is not copied into the chat, the issue or the
+report. It is rotated, and the rotation is the containment.

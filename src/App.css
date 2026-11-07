@@ -1657,10 +1657,25 @@ html.is-morphing .dock-tab {
 }
 
 .hit-top {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
+  /* A row is a three-column table: the key takes the room, the notes badge sits
+     just left of the count, and the count is pinned to the right edge so every
+     number in the list lines up on the same axis (right-aligned, tabular). */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 6px;
   align-items: baseline;
+}
+
+.hit-count {
+  grid-column: 3;
+  justify-self: end;
+  text-align: right;
+  min-width: 34px;
+}
+
+.notes-badge {
+  grid-column: 2;
+  justify-self: end;
 }
 
 .hit-key {
@@ -1708,6 +1723,28 @@ html.is-morphing .dock-tab {
   padding: 28px 12px;
   text-align: center;
   line-height: 1.5;
+}
+
+/* First run / no vault: the empty state that teaches instead of a red banner.
+   One material-card inline with the list, and the only action there is. */
+.onboard {
+  margin: 14px 4px 6px;
+  padding: 14px 16px 16px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-card);
+  background: var(--material);
+  box-shadow: var(--specular);
+  text-align: center;
+}
+
+.onboard p {
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.onboard .primary {
+  margin-top: 12px;
 }
 
 /* =============================================================================
@@ -1795,6 +1832,29 @@ html.is-morphing .dock-tab {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+/* The Servicios editor is JSON on purpose: it is the same shape an LLM writes
+   through `{"op":"services","set":[…]}`. Monospace and room to breathe, because
+   a one-character typo is what the parser will complain about. */
+.service-json {
+  width: 100%;
+  min-height: 132px;
+  resize: vertical;
+  padding: 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--code-background, rgba(0, 0, 0, 0.28));
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, "Cascadia Mono", Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  tab-size: 2;
+}
+
+.service-json:focus-visible {
+  outline: none;
+  box-shadow: var(--ring);
 }
 
 .toggle-row-label {

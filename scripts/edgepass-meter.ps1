@@ -7,7 +7,7 @@
 #
 # Examples:
 #   powershell -File scripts\edgepass-meter.ps1 -Query "betty"
-#   powershell -File scripts\edgepass-meter.ps1 -Namespace dokploy -Path "projects/lotly/demo-users"
+#   powershell -File scripts\edgepass-meter.ps1 -Namespace prod -Path "projects/app/users"
 #   powershell -File scripts\edgepass-meter.ps1 -Query "infisi cb2" -Title "CB2 Infisical"
 
 param(

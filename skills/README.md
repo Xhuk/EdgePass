@@ -21,6 +21,7 @@ stranger needs on day one. Shipping them inside the repository means:
 |---|---|
 | [edgepass](edgepass/SKILL.md) | An agent must read, copy or inject a secret through the widget. |
 | [openbao-bootstrap](openbao-bootstrap/SKILL.md) | An agent walks a human through installing, initializing, unsealing or backing up OpenBao. |
+| [edgepass-led](edgepass-led/SKILL.md) | A human or an agent wants a new header LED: what to watch, how to read its state, what a click does, and how to register it without touching the exe. |
 
 ## How to use them
 

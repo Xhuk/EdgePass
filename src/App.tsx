@@ -7,9 +7,11 @@ import {
   animateTo,
   BATCH_VISIBLE_ROWS,
   DOCK_ISLAND_W,
+  DOCK_TOP,
   edgeDistances,
   expandGeometry,
   FLOAT_COLLAPSED,
+  floatCollapsedSize,
   geometryFromPlacement,
   getWindowLogic,
   isMorphing,
@@ -243,6 +245,22 @@ type StatusDto = {
   catalog: ToggleCatalog;
   /** The MCP list with live process state (see the `mcp` module in Rust). */
   mcp: McpStatus;
+  /** Owner-defined services (`services[]`): what a `svc.<id>` LED watches. */
+  services: ServiceSpec[];
+};
+
+/** One owner-defined service, as stored in `config.services[]`. */
+type ServiceSpec = {
+  id: string;
+  label: string;
+  name: string;
+  probe:
+    | { kind: "process"; image: string; match?: string | null }
+    | { kind: "cmd"; cmd: string[]; cwd?: string };
+  actions?: {
+    on?: { cmd: string[]; cwd?: string } | null;
+    off?: { cmd: string[]; cwd?: string } | null;
+  };
 };
 
 /** One LED as stored in `config.json`. */
@@ -273,6 +291,8 @@ type ToggleState = {
 type ToggleView = ToggleSpec & {
   state: ToggleState;
   docs: { probe: string; on: string; off: string; alt?: string | null };
+  /** Who owns the process behind the light, when the probe is about one. */
+  origin?: "managed" | "external" | "down";
 };
 
 type ToggleCatalog = {
@@ -538,21 +558,45 @@ type Diagnostics = {
   }>;
 };
 
-/** Plain-text version of the panel, for pasting into a chat or an issue. */
+/** File name of a path: the report keeps *which file*, not *where* — a public
+ *  issue must not carry the author's (or anyone's) directory layout. */
+function nameOf(text: string): string {
+  if (!text || text === "-") return "-";
+  return text.split(/[\\/]/).filter(Boolean).pop() ?? "-";
+}
+
+/** What would make a pasted issue a leak: full user paths, non-loopback hosts,
+ *  and any token-shaped string. Loopback addresses are generic and stay.
+ *  The log tail goes through here too — the log is supposed to never carry a
+ *  secret, and this makes "supposed to" survive a mistake. */
+function redact(text: string): string {
+  return text
+    // Any drive's user home: C:\Users\<alguien>\… stays \<home>\…
+    .replace(/[A-Za-z]:\\Users\\[^\s"',:|<>()\[\]]+/g, "<home>")
+    .replace(/\/home\/[A-Za-z0-9_.-]+/g, "<home>")
+    // A remote vault address says "where", not "what": keep it, call it <host>.
+    .replace(/(https?):\/\/(?!localhost|127\.0\.0\.1|\[::1\])[^\s/:]+/g, "$1://<host>")
+    // OpenBao / Vault token shapes, in case a value ever reached the log.
+    .replace(/\b(?:hvs|hvts|s)\.[A-Za-z0-9_-]{8,}/g, "<token>");
+}
+
+/** Plain-text version of the panel, for pasting into a chat or an issue.
+ *  A whitelist, not a blacklist: the report carries names of files (not paths),
+ *  token/no-token (never the token), and a redacted log tail. */
 function buildReport(d: Diagnostics): string {
   const rows: [string, string][] = [
     ["edgePass", d.version],
     ["build", d.buildTime ?? "-"],
-    ["exe", d.exe],
+    ["exe", nameOf(d.exe)],
     ["os", d.os],
     ["webview2", d.webview2],
-    ["config", d.configPath],
-    ["db", d.dbPath],
-    ["log", d.logPath],
-    ["baoAddr", d.baoAddr],
+    ["config", nameOf(d.configPath)],
+    ["db", nameOf(d.dbPath)],
+    ["log", nameOf(d.logPath)],
+    ["baoAddr", redact(d.baoAddr)],
     ["mount", d.mount],
     ["namespaces", d.namespaces.join(", ") || "(root)"],
-    ["initJson", d.initPath],
+    ["initJson", d.initPath ? nameOf(d.initPath) : "(sin configurar)"],
     ["token", d.hasToken ? "cargado" : "sin token"],
     ["autoUnseal", String(d.autoUnseal)],
     ["autoSealIdleSecs", String(d.autoSealIdleSecs)],
@@ -562,20 +606,20 @@ function buildReport(d: Diagnostics): string {
     [
       "runs",
       (d.runs ?? [])
-        .map((r) => `${r.runId}:${r.state}:exit=${r.code ?? "-"}:${r.cmd}`)
+        .map((r) => `${r.runId}:${r.state}:exit=${r.code ?? "-"}`)
         .join(" | ") || "(none)",
     ],
     ["indexadas", String(d.indexed)],
     ["lastSync", d.lastSync ?? "-"],
-    ["vault", `${d.seal.message} (reachable=${d.seal.reachable}, sealed=${d.seal.sealed})`],
-    ["servicio", `${d.service.state} · ${d.service.message}`],
+    ["vault", redact(`${d.seal.message} (reachable=${d.seal.reachable}, sealed=${d.seal.sealed})`)],
+    ["servicio", redact(`${d.service.state} · ${d.service.message}`)],
   ];
   return [
     "edgePass · informe de diagnóstico",
     ...rows.map(([k, v]) => `${k}: ${v}`),
     "",
-    "--- log (últimas líneas) ---",
-    d.logTail || "(vacío)",
+    "--- log (últimas líneas, redactado) ---",
+    redact(d.logTail || "(vacío)"),
   ].join("\n");
 }
 
@@ -590,7 +634,7 @@ function grantCountdown(expiresAt: number, nowSecs: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-/** `C:\proyectos\lotly` → `lotly`: of that path, the project is the useful half. */
+/** `…\work\mi-app` → `mi-app`: of that path, the project is the useful half. */
 function noticeProject(root: string): string {
   const parts = root.split(/[\\/]/).filter(Boolean);
   return parts[parts.length - 1] ?? root;
@@ -620,6 +664,9 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [status, setStatus] = useState<StatusDto | null>(null);
+  /** How many LEDs the header shows. The collapsed pill is sized from this, so
+   *  it has to be readable outside a render (collapse/drag callbacks). */
+  const ledsCount = status?.toggles?.length ?? 0;
   const [toast, setToast] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -685,6 +732,12 @@ export default function App() {
   /** The Ajustes draft of `config.toggles[]`. Seeded when that panel *opens*, not
    *  on every 5 s status poll: a row being edited must survive the tick. */
   const [toggleDrafts, setToggleDrafts] = useState<ToggleSpec[]>([]);
+  /** The Servicios editor: the JSON is the source (it is also what an LLM
+   *  writes through `{"op":"services","set":[…]}`), and `serviceDrafts` is the
+   *  parsed view that the save sends and the summary lists. */
+  const [serviceDrafts, setServiceDrafts] = useState<ServiceSpec[]>([]);
+  const [serviceJson, setServiceJson] = useState("");
+  const [serviceJsonError, setServiceJsonError] = useState<string | null>(null);
   const [autostart, setAutostart] = useState<{
     installed: boolean;
     message: string;
@@ -722,6 +775,11 @@ export default function App() {
   /** Mirrors `ready` for the callbacks that must not fire during boot. */
   const readyRef = useRef(false);
   const expandedRef = useRef(false);
+  const ledsCountRef = useRef(0);
+  /** The status call in flight, if any (see `refreshStatus`). */
+  const statusInFlight = useRef<Promise<StatusDto> | null>(null);
+  /** Debounce for the live `services[]` validation. */
+  const serviceValidateTimer = useRef<number | null>(null);
   const grantRef = useRef<GrantRequest | null>(null);
   const grantRestorePill = useRef(false);
   const autoCollapseIdleSecsRef = useRef(10);
@@ -743,6 +801,49 @@ export default function App() {
   useEffect(() => {
     expandedRef.current = expanded;
   }, [expanded]);
+
+  /**
+   * The collapsed pill is sized to the LEDs it actually has.
+   *
+   * `tauri.conf.json` opens the window at 356 and the pill at 410 — the chrome
+   * plus three LEDs. From the fourth on the header is compact and `overflow:
+   * hidden`, so without this a seventh LED would be bitten instead of widening
+   * the bar. It also shrinks back when a LED is removed, and grows around the
+   * same centre so the pill does not crawl across the screen.
+   *
+   * Skipped while expanded (the panel owns its size, `sizeForChrome`) and while
+   * docked (the rail asks for its own, `sizeDockTo`).
+   */
+  useEffect(() => {
+    ledsCountRef.current = ledsCount;
+    // Before the restore effect has placed the window, resizing is a race with
+    // it: let the restore land first, then fit.
+    if (!ready || !status || expanded || dock !== null) return;
+    let alive = true;
+    const fit = async () => {
+      const cur = await getWindowLogic();
+      if (!alive) return;
+      const want = Math.min(floatCollapsedSize(ledsCount).w, cur.work.w - 16);
+      // `cur.w` is the *outer* rect: tao's invisible shadow frame is ~15 px
+      // wider than what `setSize` applies, so a small difference is "already".
+      if (Math.abs(cur.w - want) < 18) return;
+      const center = cur.x + cur.w / 2;
+      const x = Math.max(
+        cur.work.x + 8,
+        Math.min(center - want / 2, cur.work.x + cur.work.w - want - 8),
+      );
+      const y = Math.max(
+        cur.work.y + 8,
+        Math.min(cur.y, cur.work.y + cur.work.h - FLOAT_COLLAPSED.h - 8),
+      );
+      traceUi(`pill fit leds=${ledsCount} ${Math.round(cur.w)}→${want}`);
+      await animateTo({ x, y, w: want, h: FLOAT_COLLAPSED.h });
+    };
+    void fit().catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [ledsCount, expanded, dock, ready, status]);
   useEffect(() => {
     grantRef.current = grant;
   }, [grant]);
@@ -852,9 +953,20 @@ export default function App() {
   }, []);
 
   const refreshStatus = useCallback(async () => {
-    const s = await invoke<StatusDto>("get_status");
-    applyStatus(s);
-    return s;
+    // One snapshot at a time. `setInterval` does not wait, so a slow poll (a
+    // cold service probe, a busy MCP sweep) used to start a second one and
+    // double the probes; callers that need the value share the same promise.
+    if (statusInFlight.current) return statusInFlight.current;
+    const pending = invoke<StatusDto>("get_status")
+      .then((s) => {
+        applyStatus(s);
+        return s;
+      })
+      .finally(() => {
+        statusInFlight.current = null;
+      });
+    statusInFlight.current = pending;
+    return pending;
   }, [applyStatus]);
 
   /**
@@ -974,17 +1086,19 @@ export default function App() {
       }
       // Pulled away — float pill
       applyDock(null);
+      const size = floatCollapsedSize(ledsCountRef.current);
+      const w = Math.min(size.w, cur.work.w - 16);
       await animateTo({
         x: Math.max(
           cur.work.x + 8,
-          Math.min(cur.x, cur.work.x + cur.work.w - FLOAT_COLLAPSED.w - 8),
+          Math.min(cur.x, cur.work.x + cur.work.w - w - 8),
         ),
         y: Math.max(
           cur.work.y + 8,
-          Math.min(cur.y, cur.work.y + cur.work.h - FLOAT_COLLAPSED.h - 8),
+          Math.min(cur.y, cur.work.y + cur.work.h - size.h - 8),
         ),
-        w: FLOAT_COLLAPSED.w,
-        h: FLOAT_COLLAPSED.h,
+        w,
+        h: size.h,
       });
       return;
     }
@@ -1009,7 +1123,13 @@ export default function App() {
     try {
       const cur = await getWindowLogic();
       await invoke("save_placement", {
-        placement: placementFrom(cur, cur.work, dockRef.current, cur.monitor),
+        placement: placementFrom(
+          cur,
+          cur.work,
+          dockRef.current,
+          cur.monitor,
+          floatCollapsedSize(ledsCountRef.current).w,
+        ),
       });
     } catch {
       /* sin placement: el widget abre donde lo ponga el SO */
@@ -1133,7 +1253,7 @@ export default function App() {
   // slim rail fit. A rail that already fits is a no-op, so the 5 s poll cannot
   // make it breathe.
   useEffect(() => {
-    if (dock === null || expanded || dock === "top") {
+    if (dock === null || expanded) {
       setDockIsland(false);
       return;
     }
@@ -1173,7 +1293,12 @@ export default function App() {
       const need2 = dockNeed(el2);
       // El piso del rail también cuenta como "lo que necesita": comparar sólo
       // con las etiquetas hacía que la verificación creyera que sobraba ancho.
-      const want = dockIsland ? Math.max(DOCK_ISLAND_W, need2.w) : Math.max(need2.w, 52);
+      const want =
+        dock === "top"
+          ? Math.max(neededWidth(el2), DOCK_TOP.w)
+          : dockIsland
+            ? Math.max(DOCK_ISLAND_W, need2.w)
+            : Math.max(need2.w, 52);
       traceUi(`dock verify vp=${vw} need=${need2.w} want=${want} isla=${dockIsland ? 1 : 0}`);
       if (vw <= want + 12 || checks++ >= 3) return;
       traceUi(`dock corrige: vp=${vw} > need=${want} (intento ${checks})`);
@@ -1188,12 +1313,18 @@ export default function App() {
         if (tries-- > 0) requestAnimationFrame(apply);
         return;
       }
-      const need = dockNeed(el);
+      const need = dock === "top" ? { w: neededWidth(el), h: DOCK_TOP.h } : dockNeed(el);
       if (need.w <= 0) return;
       // La isla tiene un ancho cómodo fijo (el layout en fila lo llena, y un
       // ancho derivado de las etiquetas la haría saltar entre LEDs); el rail fino
-      // pide exactamente lo que sus etiquetas necesitan.
-      const w = dockIsland ? Math.max(DOCK_ISLAND_W, need.w) : need.w;
+      // pide exactamente lo que sus etiquetas necesitan. El dock superior es una
+      // fila: pide el ancho de todo lo que lleva.
+      const w =
+        dock === "top"
+          ? Math.max(need.w, DOCK_TOP.w)
+          : dockIsland
+            ? Math.max(DOCK_ISLAND_W, need.w)
+            : need.w;
       traceUi(`dock fit need=${need.w}x${need.h} isla=${dockIsland ? 1 : 0}`);
       void sizeDockTo(edge, w, need.h, { remember: !dockIsland }).catch(() => undefined);
       later(verify, 340);
@@ -1250,7 +1381,7 @@ export default function App() {
             namespace: "",
             path: "",
             keys: [""],
-            title: "Meter · nuevo secreto",
+            title: t("Meter · nuevo secreto"),
           });
           return;
         }
@@ -1355,9 +1486,18 @@ export default function App() {
           // would compute a centre for the wrong width — and a first launch near
           // an edge would glue itself to it a moment later, in plain sight.
           const cur = await getWindowLogic();
-          spot = placementFrom(cur, cur.work, null, cur.monitor);
+          spot = placementFrom(
+            cur,
+            cur.work,
+            null,
+            cur.monitor,
+            floatCollapsedSize(ledsCountRef.current).w,
+          );
         }
-        const target = await geometryFromPlacement(spot);
+        const target = await geometryFromPlacement(
+          spot,
+          floatCollapsedSize(ledsCountRef.current).w,
+        );
         if (target) {
           // `applyDock` also sets the ref the spring's `onMoved` handler reads.
           applyDock(target.dock);
@@ -1618,11 +1758,19 @@ export default function App() {
       await snapToDock(edge);
     } else {
       applyDock(null);
+      const size = floatCollapsedSize(ledsCountRef.current);
+      const w = Math.min(size.w, cur.work.w - 16);
       await animateTo({
-        x: cur.x,
-        y: cur.y,
-        w: FLOAT_COLLAPSED.w,
-        h: FLOAT_COLLAPSED.h,
+        x: Math.max(
+          cur.work.x + 8,
+          Math.min(cur.x + cur.w / 2 - w / 2, cur.work.x + cur.work.w - w - 8),
+        ),
+        y: Math.max(
+          cur.work.y + 8,
+          Math.min(cur.y, cur.work.y + cur.work.h - size.h - 8),
+        ),
+        w,
+        h: size.h,
       });
     }
     // A collapse can land somewhere new (another edge, another monitor) without
@@ -2126,7 +2274,67 @@ export default function App() {
         alt: t.alt ?? null,
       })),
     );
+    const services = status?.services ?? [];
+    setServiceDrafts(services);
+    setServiceJson(services.length ? JSON.stringify(services, null, 2) : "[]");
+    setServiceJsonError(null);
     setPanel("settings");
+  }
+
+  /** The JSON pane is the editor: parse on every keystroke so the summary and
+   *  the save agree, and say exactly what is wrong instead of failing at save.
+   *  After the local parse, Rust validates for real (slugged ids, the cap, the
+   *  probe shape) with the same rules `save_settings` applies. */
+  function onServiceJson(text: string) {
+    setServiceJson(text);
+    if (serviceValidateTimer.current) {
+      window.clearTimeout(serviceValidateTimer.current);
+      serviceValidateTimer.current = null;
+    }
+    if (!text.trim()) {
+      setServiceDrafts([]);
+      setServiceJsonError(null);
+      return;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+      if (!Array.isArray(parsed)) throw new Error("tiene que ser un array de servicios");
+    } catch (e) {
+      setServiceJsonError(e instanceof Error ? e.message : String(e));
+      return;
+    }
+    setServiceDrafts(parsed as ServiceSpec[]);
+    setServiceJsonError(null);
+    serviceValidateTimer.current = window.setTimeout(() => {
+      invoke<ServiceSpec[]>("validate_services", { list: parsed })
+        .then((normalized) => {
+          setServiceJsonError(null);
+          setServiceDrafts(normalized);
+        })
+        .catch((e) => setServiceJsonError(String(e)));
+    }, 300);
+  }
+
+  function setServiceList(next: ServiceSpec[]) {
+    setServiceDrafts(next);
+    setServiceJson(JSON.stringify(next, null, 2));
+    setServiceJsonError(null);
+  }
+
+  /** A row that works as written: a process probe needs no command, so it is
+   *  the safest thing to hand someone who has never written one. */
+  function addServiceTemplate() {
+    setServiceList([
+      ...serviceDrafts,
+      {
+        id: "mi-api",
+        label: "API",
+        name: "mi servicio local",
+        probe: { kind: "process", image: "mi-api.exe" },
+        actions: {},
+      },
+    ]);
   }
 
   /** Catalog entry for a probe: what the picker shows and what a new row prefills. */
@@ -2189,6 +2397,9 @@ export default function App() {
     setBusy(true);
     setError(null);
     try {
+      if (serviceJsonError) {
+        throw new Error(`services JSON inválido: ${serviceJsonError}`);
+      }
       const normalized = namespaces
         .split(",")
         .map((s) => s.trim())
@@ -2214,6 +2425,9 @@ export default function App() {
           off: t.off,
           alt: t.alt || null,
         })),
+        // Same rule as toggles: the editor owns the whole list, and Rust
+        // validates ids/probes before storing it.
+        services: serviceDrafts,
       });
       setToken("");
       setToast("Ajustes guardados");
@@ -2247,16 +2461,23 @@ export default function App() {
     }
   }
 
-  /** How a suggested passphrase is shaped. Kept in the window only: it is a
-   *  preference, not a secret, and it is not written to config.json. */
+  /** How a suggested passphrase is shaped. It is saved as `passphrase` in
+   *  `config.json` (not a secret); the window keeps the live draft. */
   const [passOpts, setPassOpts] = useState({
     words: 6,
     separator: "-",
     capitalize: false,
     digits: false,
     symbol: false,
+    randomChars: 8,
     compatible: false,
   });
+  /** Entropy of the current draft: words + fresh block + optional suffixes. */
+  const passBits = () =>
+    passOpts.words * Math.log2(7411) +
+    passOpts.randomChars * Math.log2(62) +
+    (passOpts.digits ? 2 * Math.log2(10) : 0) +
+    (!passOpts.compatible && passOpts.symbol ? Math.log2(14) : 0);
   /** What the last suggestion was worth, shown next to the controls. */
   const [passNote, setPassNote] = useState("");
   /** False until a person picks the style once. Read from config.json. */
@@ -2276,6 +2497,7 @@ export default function App() {
       capitalize: boolean;
       digits: boolean;
       symbol: boolean;
+      randomChars: number;
       compatible: boolean;
       configured: boolean;
     }>("passphrase_config")
@@ -2287,6 +2509,7 @@ export default function App() {
           capitalize: c.capitalize,
           digits: c.digits,
           symbol: c.symbol,
+          randomChars: c.randomChars ?? 0,
           compatible: c.compatible,
         });
         setPassConfigured(c.configured);
@@ -2598,11 +2821,13 @@ export default function App() {
    */
   const ledTitle = (led: ToggleView) => {
     const dir: "on" | "off" = led.state.on ? "off" : "on";
-    const lines = [
-      `${led.label} · ${led.state.detail}`,
-      `Click = ${dir} · ${dir === "on" ? led.docs.on : led.docs.off}`,
-    ];
-    if (led.alt && led.docs.alt) lines.push(`Ctrl/clic derecho = ${led.docs.alt}`);
+    const lines = [`${led.label} · ${led.state.detail}`];
+    if (led.on || led.off) {
+      lines.push(`Click = ${dir} · ${dir === "on" ? led.docs.on : led.docs.off}`);
+      if (led.alt && led.docs.alt) lines.push(`Ctrl/clic derecho = ${led.docs.alt}`);
+    } else {
+      lines.push(t("Solo mira: no tiene acción."));
+    }
     if (led.state.ask && grant) {
       lines.push(`Allow pendiente · ${grant.actor} · ${grant.path} (${grantLeft})`);
     }
@@ -3155,14 +3380,13 @@ export default function App() {
                                 transition={spring.content}
                               >
                                 {!seal?.reachable
-                                  ? bootMsg || "OpenBao offline — arranca el servicio OpenBao"
-                                  : "Sin secretos indexados aún"}
+                                  ? bootMsg || t("OpenBao offline — arranca el servicio OpenBao")
+                                  : t("Sin secretos indexados aún")}
                               </motion.li>
                             )}
                             {hits.map((hit, i) => (
                               <motion.li
-                                key={`${hit.namespace}/${hit.path}/${hit.key}`}
-                                ref={i === selected ? selectedRef : undefined}
+                                key={`${hit.namespace}/${hit.path}/${hit.key}`}                                ref={i === selected ? selectedRef : undefined}
                                 className="hit-li"
                                 role="presentation"
                                 initial={{ opacity: 0, y: 4 }}
@@ -3187,7 +3411,7 @@ export default function App() {
                                     <div className="hit-top">
                                       <span className="hit-key">{hit.key}</span>
                                       {hit.useCount > 0 && (
-                                        <span className="badge">{hit.useCount}×</span>
+                                        <span className="badge hit-count">{hit.useCount}×</span>
                                       )}
                                       {hit.notes > 0 && (
                                         <span className="badge notes-badge" title={`${hit.notes} nota(s)`}>
@@ -3267,6 +3491,38 @@ export default function App() {
                             ))}
                           </AnimatePresence>
                         </ul>
+                        {hits.length === 0 && !seal?.reachable && (
+                          <div className="onboard" role="note">
+                            <p>
+                              {t("edgePass no es el vault: es el helper. Necesita un OpenBao local corriendo en loopback y un token: dirección, mount y namespace se definen en Ajustes → Vault.")}
+                            </p>
+                            <motion.button
+                              className="primary"
+                              type="button"
+                              whileTap={tap}
+                              disabled={busy}
+                              onClick={openSettings}
+                            >
+                              {t("Conectar un vault")}
+                            </motion.button>
+                          </div>
+                        )}
+                        {hits.length === 0 && seal?.reachable && status !== null && !status.hasToken && (
+                          <div className="onboard" role="note">
+                            <p>
+                              {t("El vault responde, pero no hay token cargado: pegá uno manual en Ajustes → Vault o define el Init JSON para que el widget lo lea solo.")}
+                            </p>
+                            <motion.button
+                              className="primary"
+                              type="button"
+                              whileTap={tap}
+                              disabled={busy}
+                              onClick={openSettings}
+                            >
+                              {t("Abrir Ajustes")}
+                            </motion.button>
+                          </div>
+                        )}
                       </>
                   </motion.section>
                 )}
@@ -3282,7 +3538,7 @@ export default function App() {
                   >
                     <div className="batch-head">
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div className="batch-title">{ingest.title || "Meter · nuevo secreto"}</div>
+                        <div className="batch-title">{ingest.title || t("Meter · nuevo secreto")}</div>
                         <div className="path-edit-meta" style={{ marginTop: 6 }}>
                           <input
                             className="batch-key"
@@ -3670,6 +3926,22 @@ export default function App() {
                             </select>
                           </label>
                           <label>
+                            {t("Aleatorio")}
+                            <select
+                              value={passOpts.randomChars}
+                              onChange={(e) =>
+                                setPassOpts({ ...passOpts, randomChars: Number(e.target.value) })
+                              }
+                            >
+                              {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                                <option key={n} value={n}>{n}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <p className="hint">
+                            {t("Caracteres frescos por frase; no se guardan. El salt de instalación solo diversifica entre máquinas.")}
+                          </p>
+                          <label>
                             {t("Separador")}
                             <select
                               value={passOpts.separator}
@@ -3693,10 +3965,7 @@ export default function App() {
                               }
                             />{t("Solo letras y números")}</label>
                           <p className="hint">
-                            {(() => {
-                              const bits = passOpts.words * Math.log2(7411);
-                              return `${t("Fuerza aproximada")}: ${bits.toFixed(0)} bits`;
-                            })()}
+                            {`${t("Fuerza aproximada")}: ${passBits().toFixed(0)} bits`}
                           </p>
                           <div className="settings-row">
                             <motion.button
@@ -4305,7 +4574,7 @@ export default function App() {
                       </label>
                       <p className="hint">
                         <code>.</code> = root + todos los namespaces hijos · lista explícita acota (ej.{" "}
-                        <code>dokploy</code>). Solo loopback (127.0.0.1 · localhost · ::1).
+                        <code>mi-api</code>). Solo loopback (127.0.0.1 · localhost · ::1).
                       </p>
                     </div>
 
@@ -4313,7 +4582,12 @@ export default function App() {
                       <p className="group-title">{t("Acceso")}</p>
                       <label>
                         Init JSON
-                        <input value={initPath} onChange={(e) => setInitPath(e.target.value)} spellCheck={false} />
+                        <input
+                          value={initPath}
+                          onChange={(e) => setInitPath(e.target.value)}
+                          spellCheck={false}
+                          placeholder={t("ruta del init del vault (opcional)")}
+                        />
                       </label>
                       <label>{t("Token manual")}<input
                           type="password"
@@ -4470,6 +4744,7 @@ export default function App() {
                                 value={row.on}
                                 onChange={(e) => patchToggle(i, { on: e.target.value })}
                               >
+                                <option value="">— {t("solo mirar")} —</option>
                                 {(status?.catalog.actions ?? []).map((a) => (
                                   <option key={a.id} value={a.id}>
                                     {a.id}
@@ -4481,6 +4756,7 @@ export default function App() {
                                 value={row.off}
                                 onChange={(e) => patchToggle(i, { off: e.target.value })}
                               >
+                                <option value="">— {t("solo mirar")} —</option>
                                 {(status?.catalog.actions ?? []).map((a) => (
                                   <option key={a.id} value={a.id}>
                                     {a.id}
@@ -4513,16 +4789,70 @@ export default function App() {
                           type="button"
                           className="ghost"
                           disabled={
-                            !status || toggleDrafts.length >= (status.catalog.maxToggles ?? 5)
+                            !status || toggleDrafts.length >= (status.catalog.maxToggles ?? 8)
                           }
                           onClick={addToggle}
                         >
                           ＋ Agregar un toggle
                         </button>
                         <span className="hint">
-                          {toggleDrafts.length}/{status?.catalog.maxToggles ?? 5} · se aplican al
+                          {toggleDrafts.length}/{status?.catalog.maxToggles ?? 8} · se aplican al
                           guardar
                         </span>
+                      </div>
+                    </div>
+
+                    <div className="group">
+                      <p className="group-title">{t("Servicios")}</p>
+                      <p className="hint">
+                        {t("Lo que corre en tu máquina y el binario no conoce: una API, un contenedor, un túnel.")}{" "}
+                        {t("Cada fila publica un probe")} <code>svc.&lt;id&gt;</code>{" "}
+                        {t("con sus acciones")} <code>svc.&lt;id&gt;.on|off</code>.
+                      </p>
+                      <p className="hint">
+                        {t("Dos clases de sonda:")} <code>process</code>{" "}
+                        {t("(mira la lista de procesos, no ejecuta nada) y")} <code>cmd</code>{" "}
+                        {t("(0 = encendido, 2 = apagado, 3 = ámbar; la primera línea de stdout es el tooltip).")}
+                      </p>
+                      <textarea
+                        className="service-json"
+                        value={serviceJson}
+                        spellCheck={false}
+                        rows={9}
+                        placeholder={'[\n  { "id": "mi-api", "label": "API", "name": "mi api", "probe": { "kind": "process", "image": "mi-api.exe" } }\n]'}
+                        onChange={(e) => onServiceJson(e.target.value)}
+                        aria-label={t("Servicios en JSON")}
+                      />
+                      {serviceJsonError && (
+                        <p className="hint warn">JSON inválido: {serviceJsonError}</p>
+                      )}
+                      <p className="hint">
+                        {serviceDrafts.length === 0
+                          ? t("Sin servicios definidos.")
+                          : `${serviceDrafts.length} servicio(s): ${serviceDrafts
+                              .map((s) => (s.id ?? "").trim() || "?")
+                              .join(", ")}`}
+                      </p>
+                      {serviceDrafts.length > (status?.catalog.maxToggles ?? 8) && (
+                        <p className="hint warn">
+                          {t("El header muestra hasta")}{" "}
+                          {status?.catalog.maxToggles ?? 8}{" "}
+                          {t("LEDs; un servicio sin LED no se consulta.")}
+                        </p>
+                      )}
+                      <div className="settings-row">
+                        <button type="button" className="ghost" onClick={addServiceTemplate}>
+                          ＋ {t("Agregar ejemplo")}
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost"
+                          onClick={() => setServiceList([])}
+                          disabled={serviceDrafts.length === 0}
+                        >
+                          {t("Vaciar")}
+                        </button>
+                        <span className="hint">{t("se aplican al guardar")}</span>
                       </div>
                     </div>
 
@@ -4562,6 +4892,22 @@ export default function App() {
                         </select>
                       </label>
                       <label>
+                        {t("Aleatorio")}
+                        <select
+                          value={passOpts.randomChars}
+                          onChange={(e) =>
+                            setPassOpts({ ...passOpts, randomChars: Number(e.target.value) })
+                          }
+                        >
+                          {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                            <option key={n} value={n}>{n}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <p className="hint">
+                        {t("Caracteres frescos por frase; no se guardan. El salt de instalación solo diversifica entre máquinas.")}
+                      </p>
+                      <label>
                         {t("Separador")}
                         <select
                           value={passOpts.separator}
@@ -4600,14 +4946,7 @@ export default function App() {
                           onChange={(e) => setPassOpts({ ...passOpts, compatible: e.target.checked })}
                         />{t("Solo letras y números")}</label>
                       <p className="hint">
-                        {(() => {
-                          // Must match `passphrase.rs`: 7.411 palabras y 14 símbolos.
-                          const bits =
-                            passOpts.words * Math.log2(7411) +
-                            (passOpts.digits ? 2 * Math.log2(10) : 0) +
-                            (!passOpts.compatible && passOpts.symbol ? Math.log2(14) : 0);
-                          return `${t("Fuerza aproximada")}: ${bits.toFixed(0)} bits`;
-                        })()}
+                        {`${t("Fuerza aproximada")}: ${passBits().toFixed(0)} bits`}
                         {passNote ? ` · ${passNote}` : ""}
                       </p>
                       <div className="settings-row">
@@ -4644,7 +4983,7 @@ export default function App() {
                     exit={{ opacity: 0, y: -4 }}
                     transition={spring.content}
                   >
-                    <p className="hint">{t("Lo que el comité dejó en disco: el hook del servidor MCP (lo que se escribe por el board) y el vigilante de la carpeta (una nota copiada a mano, un archivo restaurado). El contador son las que todavía no marcaste como vistas.")}</p>
+                    <p className="hint">{t("Lo que un agente externo dejó en disco: el hook del servidor MCP (lo que escribe por el tablero) y el vigilante de la carpeta (una nota copiada a mano, un archivo restaurado). El contador son las que todavía no marcaste como vistas.")}</p>
                     <div className="settings-row notices-head">
                       <span className="badge">{notices?.unseen ?? 0} sin ver</span>
                       <span className="notice-total">
@@ -4696,7 +5035,7 @@ export default function App() {
                         </li>
                       ))}
                       {!notices?.items.length && (
-                        <li className="notice-empty">{t("Todavía no hay avisos. Aparecen solos cuando el comité escribe.")}</li>
+                        <li className="notice-empty">{t("Todavía no hay avisos. Aparecen solos cuando un agente externo escribe.")}</li>
                       )}
                     </ul>
                   </motion.section>

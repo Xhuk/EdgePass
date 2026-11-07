@@ -27,7 +27,9 @@
 //! - `ingest-form` — open the UI table for path + key names (LLM push, no values)
 //! - `toggles` — the header LEDs as data: `{"op":"toggles"}` reads them (with the
 //!   vocabulary in `catalog`), `{"op":"toggles","set":[…]}` replaces the list
-//!   (validated: ids from the catalog, 5 max), `{"op":"toggle","id":"kv","dir":"on|off|alt|flip"}`
+//!   (validated: ids from the catalog, 8 max), `{"op":"toggle","id":"kv","dir":"on|off|alt|flip"}`
+//!   fires one. `{"op":"services"}` is the same pair for the owner-defined
+//!   services a `svc.<id>` LED watches.
 //!   fires one. `status` also carries `toggles`.
 //!
 //! ## Threat model, honestly
@@ -408,7 +410,7 @@ async fn dispatch(req: Value, state: Arc<AppState>, app: &AppHandle) -> Value {
             Err(e) => json!({ "ok": false, "error": e }),
         },
         // El runner local de GHA: leer su estado (`{"op":"gha"}`) o su log
-        // (`{"op":"gha-logs","id":"vetgroom","tail":200,"source":"lifecycle|worker|both"}`).
+        // (`{"op":"gha-logs","id":"mi-app","tail":200,"source":"lifecycle|worker|both"}`).
         // El log es lo que un agente recupera para explicar un fallo sin abrir el widget, y
         // lo que muestra el visor que el LED abre solo.
         "gha" => match load_config() {
@@ -541,6 +543,10 @@ async fn dispatch(req: Value, state: Arc<AppState>, app: &AppHandle) -> Value {
         "note" => note_op(&req, &state),
         "toggles" => toggles_op(&req, &state).await,
         "toggle" => toggle_op(&req, &state).await,
+        // Los servicios del dueño: `{"op":"services"}` lee, `{"op":"services","set":[…]}`
+        // reemplaza. Es el punto de extensión que permite que un LLM agregue un LED
+        // sin tocar el binario.
+        "services" => services_op(&req).await,
         "request" => request_op(req, state, app).await,
         "request-wait" => request_wait(&req, &state).await,
         "request-status" => request_status(&req, &state),
@@ -750,7 +756,7 @@ fn distinct_paths(hits: &[SearchHit]) -> usize {
 }
 
 /// A query may match many keys; that is fine as long as every hit belongs to the
-/// *same* path (`betty` hitting the six `BETTY_*` keys of one path is exactly the
+/// *same* path (one user hitting the six `DEPLOY_*` keys of one path is exactly the
 /// case this op exists for). Hits spread over several paths are told apart only
 /// by a human, so they are reported back instead of guessed at.
 fn path_from_hits(hits: &[SearchHit]) -> Result<(String, String), Value> {
@@ -823,7 +829,7 @@ fn push_ingest_form(state: &AppState, app: &AppHandle, form: &IngestFormDto) {
 }
 
 /// Open the batch secret form in the widget.
-/// `{"op":"ingest-form","namespace":"buenaidee","path":"projects/x/secrets","keys":["A","B"]}`
+/// `{"op":"ingest-form","namespace":"integraciones","path":"projects/x/secrets","keys":["A","B"]}`
 fn ingest_form(req: Value, state: &AppState, app: &AppHandle) -> Value {
     let namespace = req
         .get("namespace")
@@ -896,8 +902,8 @@ fn ingest_form(req: Value, state: &AppState, app: &AppHandle) -> Value {
 }
 
 /// Open the Meter tab filled with every field of one secret.
-/// `{"op":"meter","query":"betty"}` or
-/// `{"op":"meter","namespace":"dokploy","path":"projects/lotly/demo-users"}`.
+/// `{"op":"meter","query":"deploy"}` or
+/// `{"op":"meter","namespace":"infra","path":"projects/demo/web"}`..
 ///
 /// This is the whole "muéstrame los datos de X" flow, and the reason it opens a
 /// *panel* instead of answering: the values are read by the widget with its own
@@ -1644,7 +1650,7 @@ fn apply_env_map(
         .collect()
 }
 
-fn looks_like_secret_output(s: &str) -> bool {
+pub(crate) fn looks_like_secret_output(s: &str) -> bool {
     if s.contains("BEGIN ") && s.contains("PRIVATE") {
         return true;
     }
@@ -1677,15 +1683,15 @@ fn run_timeout_secs(req: &Value) -> u64 {
         .clamp(1, MAX_RUN_TIMEOUT_SECS)
 }
 
-/// What a finished — or killed — child produced.
+/// What a finished - or killed - child produced.
 #[derive(Debug)]
-struct ChildRun {
-    code: Option<i32>,
-    success: bool,
-    timed_out: bool,
-    canceled: bool,
-    stdout: Vec<u8>,
-    stderr: Vec<u8>,
+pub(crate) struct ChildRun {
+    pub(crate) code: Option<i32>,
+    pub(crate) success: bool,
+    pub(crate) timed_out: bool,
+    pub(crate) canceled: bool,
+    pub(crate) stdout: Vec<u8>,
+    pub(crate) stderr: Vec<u8>,
 }
 
 fn spawn_child_process(
@@ -1722,7 +1728,7 @@ fn spawn_child_process(
 /// Pipes are drained on their own threads: a child that fills a pipe buffer
 /// would otherwise block on write while we sit in `try_wait`, and the pair
 /// would deadlock. `stdin` is closed, like `Command::output()` does.
-fn run_child(
+pub(crate) fn run_child(
     program: &str,
     args: &[String],
     env: &[(String, String)],
@@ -1924,17 +1930,17 @@ async fn toggles_op(req: &Value, state: &AppState) -> Value {
             return json!({
                 "ok": false,
                 "error": format!("toggles inválidos: {e}"),
-                "catalog": crate::toggles::catalog(),
+                "catalog": crate::toggles::catalog(&cfg),
             })
         }
     };
-    let specs = match crate::toggles::validate(specs) {
+    let specs = match crate::toggles::validate(&cfg, specs) {
         Ok(s) => s,
         Err(e) => {
             return json!({
                 "ok": false,
                 "error": e,
-                "catalog": crate::toggles::catalog(),
+                "catalog": crate::toggles::catalog(&cfg),
             })
         }
     };
@@ -1963,7 +1969,7 @@ async fn toggles_reply(cfg: &crate::config::AppConfig, state: &AppState) -> Valu
     json!({
         "ok": true,
         "toggles": crate::toggles::views(cfg, &seal, !state.grants.list_public().is_empty()),
-        "catalog": crate::toggles::catalog(),
+        "catalog": crate::toggles::catalog(cfg),
         "max": crate::toggles::MAX_TOGGLES,
     })
 }
@@ -1998,6 +2004,88 @@ async fn toggle_op(req: &Value, state: &AppState) -> Value {
         }),
         Err(e) => json!({ "ok": false, "error": e }),
     }
+}
+
+/// `{"op":"services"}` — the owner's services as data.
+///
+/// Read returns the list plus the `svc.*` half of the catalog (probes, actions
+/// and the LEDs already pointing at them), so an agent can discover the shape
+/// instead of guessing. `{"op":"services","set":[…]}` replaces the whole list,
+/// validated exactly like `{"op":"toggles","set":[…]}`.
+///
+/// Removing a service does **not** remove its LED: the LED then says "probe
+/// desconocida" (amber) and the caller decides. Silently editing two lists from
+/// one call is how a header loses a light nobody meant to drop.
+async fn services_op(req: &Value) -> Value {
+    let cfg = match load_config() {
+        Ok(c) => c,
+        Err(e) => return json!({ "ok": false, "error": e }),
+    };
+    let Some(raw) = req.get("set") else {
+        return services_reply(&cfg);
+    };
+    let list: Vec<crate::services::ServiceSpec> = match serde_json::from_value(raw.clone()) {
+        Ok(l) => l,
+        Err(e) => {
+            return json!({
+                "ok": false,
+                "error": format!("services inválidos: {e}"),
+                "catalog": crate::toggles::catalog(&cfg),
+            })
+        }
+    };
+    let list = match crate::services::validate(list) {
+        Ok(l) => l,
+        Err(e) => {
+            return json!({
+                "ok": false,
+                "error": e,
+                "catalog": crate::toggles::catalog(&cfg),
+            })
+        }
+    };
+    let mut next = cfg.clone();
+    next.services = list;
+    if let Err(e) = crate::config::save_config(&next) {
+        return json!({ "ok": false, "error": e });
+    }
+    crate::log_info!(
+        "ipc: services set -> [{}]",
+        next.services
+            .iter()
+            .map(|s| s.id.as_str())
+            .collect::<Vec<_>>()
+            .join(",")
+    );
+    services_reply(&next)
+}
+
+fn services_reply(cfg: &crate::config::AppConfig) -> Value {
+    let cat = crate::toggles::catalog(cfg);
+    let probes: Vec<_> = cat
+        .probes
+        .into_iter()
+        .filter(|p| p.id.starts_with("svc."))
+        .collect();
+    let actions: Vec<_> = cat
+        .actions
+        .into_iter()
+        .filter(|a| a.id.starts_with("svc."))
+        .collect();
+    json!({
+        "ok": true,
+        "services": cfg.services,
+        "probes": probes,
+        "actions": actions,
+        "leds": cfg
+            .toggles
+            .iter()
+            .filter(|t| t.probe.starts_with("svc."))
+            .map(|t| t.id.as_str())
+            .collect::<Vec<_>>(),
+        "max": crate::services::MAX_SERVICES,
+        "hint": "un LED nuevo es un service + un toggle: {\"op\":\"services\",\"set\":[…]}, después {\"op\":\"toggles\",\"set\":[…]}",
+    })
 }
 
 #[cfg(test)]
@@ -2121,7 +2209,7 @@ mod tests {
             let store = state.store.lock();
             store
                 .replace_index(&[crate::openbao::SecretRef {
-                    namespace: "buenaidee".into(),
+                    namespace: "integraciones".into(),
                     path: "projects/cb2/infisical".into(),
                     key: "DATABASE_URL".into(),
                 }])
@@ -2133,7 +2221,7 @@ mod tests {
         assert_eq!(reply["count"], json!(1));
         let hit = &reply["hits"][0];
         assert_eq!(hit["key"], json!("DATABASE_URL"));
-        assert_eq!(hit["namespace"], json!("buenaidee"));
+        assert_eq!(hit["namespace"], json!("integraciones"));
         // No value field, and nothing value-shaped: the whole payload is the
         // index columns plus the note counter (a number, never text).
         assert_eq!(
@@ -2208,11 +2296,11 @@ mod tests {
             other => panic!("a 'path' must address explicitly, got {other:?}"),
         }
 
-        match parse_meter_address(&json!({ "query": " betty ", "limit": 1_000_000 }))
+        match parse_meter_address(&json!({ "query": " deploy ", "limit": 1_000_000 }))
             .expect("query address")
         {
             MeterAddress::Query { query, limit } => {
-                assert_eq!(query, "betty");
+                assert_eq!(query, "deploy");
                 // The same clamp `search` applies: an absurd limit is not a
                 // request to dump the whole index.
                 assert_eq!(limit, MAX_SEARCH_LIMIT as usize);
@@ -2229,15 +2317,15 @@ mod tests {
 
     #[test]
     fn a_query_opens_the_meter_only_when_it_names_one_path() {
-        // `betty` matching several keys of the same path is exactly the case:
+        // `deploy` matching several keys of the same path is exactly the case:
         // the human asked for that path, so the widget opens it whole.
         let (namespace, path) = path_from_hits(&[
-            hit("dokploy", "projects/lotly/demo-users", "BETTY_EMAIL"),
-            hit("dokploy", "projects/lotly/demo-users", "BETTY_PASSWORD"),
+            hit("infra", "projects/demo/web", "DEPLOY_EMAIL"),
+            hit("infra", "projects/demo/web", "DEPLOY_PASSWORD"),
         ])
         .expect("one path");
-        assert_eq!(namespace, "dokploy");
-        assert_eq!(path, "projects/lotly/demo-users");
+        assert_eq!(namespace, "infra");
+        assert_eq!(path, "projects/demo/web");
 
         // Nothing found: say the index may be stale rather than opening an
         // arbitrary secret.
@@ -2251,8 +2339,8 @@ mod tests {
         // Two paths: only a human can pick, so report the candidates instead of
         // guessing at whichever the index happened to rank first.
         let err = path_from_hits(&[
-            hit("dokploy", "projects/lotly/demo-users", "BETTY_PASSWORD"),
-            hit("dokploy", "projects/lotly/api", "BETTY_PASSWORD"),
+            hit("infra", "projects/demo/web", "DEPLOY_PASSWORD"),
+            hit("infra", "projects/demo/api", "DEPLOY_PASSWORD"),
         ])
         .expect_err("ambiguous");
         assert_eq!(err["ok"], json!(false));
@@ -2268,9 +2356,9 @@ mod tests {
         // have to fail here.
         let form = crate::IngestFormDto {
             id: 7,
-            namespace: "dokploy".into(),
-            path: "projects/lotly/demo-users".into(),
-            keys: vec!["BETTY_PASSWORD".into()],
+            namespace: "infra".into(),
+            path: "projects/demo/web".into(),
+            keys: vec!["DEPLOY_PASSWORD".into()],
             title: None,
             fill: Some("vault".into()),
         };

@@ -36,6 +36,7 @@ mod placement;
 mod pointer;
 mod qring;
 mod rand;
+mod services;
 mod skills;
 mod store;
 mod toggles;
@@ -128,11 +129,15 @@ pub struct StatusDto {
     pub idle_secs: u64,
     pub service: ServiceStatusDto,
     /// The header LEDs, as data: the stored spec plus what its probe sees right
-    /// now (see the `toggles` module â€” the vocabulary ships in `catalog`).
+    /// now (see the `toggles` module — the vocabulary ships in `catalog`).
     pub toggles: Vec<toggles::ToggleView>,
     pub catalog: toggles::Catalog,
     /// The MCP list with live process state (see the `mcp` module).
     pub mcp: mcp::McpStatusDto,
+    /// Owner-defined services (`services[]`), as stored. The `svc.<id>` half of
+    /// `catalog` is derived from this list, so the editor can render both from
+    /// one snapshot.
+    pub services: Vec<services::ServiceSpec>,
 }
 
 #[derive(Debug, Serialize)]
@@ -143,6 +148,19 @@ pub struct BootstrapResult {
     pub unsealed_now: bool,
     pub synced: Option<usize>,
     pub message: String,
+}
+
+/// Validates the `services[]` list without storing it.
+///
+/// The Ajustes editor calls this while the JSON is being typed, so the error
+/// (missing command, empty probe, over the cap) appears before Guardar and with
+/// the same rules the save would apply. It returns the normalized list, which is
+/// also what the save will send.
+#[tauri::command]
+fn validate_services(
+    list: Vec<services::ServiceSpec>,
+) -> Result<Vec<services::ServiceSpec>, String> {
+    services::validate(list)
 }
 
 /// Open vault if sealed (when auto_unseal), ensure token exists.
@@ -163,7 +181,7 @@ pub(crate) async fn ensure_ready(state: &AppState) -> Result<(AppConfig, String)
     }
 
     let token = config::get_token()?
-        .ok_or_else(|| "Sin token (activa auto-load o pÃ©galo en ajustes)".to_string())?;
+        .ok_or_else(|| "Sin token (activa auto-load o pégalo en ajustes)".to_string())?;
 
     let status = seal_status(&cfg).await;
     if !status.reachable {
@@ -225,14 +243,15 @@ fn status_snapshot(state: &AppState, cfg: &AppConfig, seal: SealStatusDto) -> St
         init_path: cfg.init_path.clone(),
         seal,
         idle_secs: idle,
-        // El poll de la UI (5s) usa la cachÃ©: no lanzamos `sc.exe` por tick.
+        // El poll de la UI (5s) usa la caché: no lanzamos `sc.exe` por tick.
         // El estado real (y fresco) se consulta al arrancar el servicio y en el bootstrap.
         service: winservice::status_cached(),
         toggles: leds,
-        catalog: toggles::catalog(),
+        catalog: toggles::catalog(cfg),
         // Cached inside `mcp` (10 s TTL): this snapshot runs on a 5 s poll and a
         // process sweep is a `tasklist` per unresolved row.
         mcp: mcp::status(cfg),
+        services: cfg.services.clone(),
     }
 }
 
@@ -240,7 +259,13 @@ fn status_snapshot(state: &AppState, cfg: &AppConfig, seal: SealStatusDto) -> St
 async fn get_status(state: State<'_, Arc<AppState>>) -> Result<StatusDto, String> {
     let cfg = load_config()?;
     let seal = seal_status(&cfg).await;
-    Ok(status_snapshot(state.inner(), &cfg, seal))
+    // The snapshot shells out (MCP sweep, `svc` probes) and would block a tokio
+    // worker; with a couple of cold `cmd` services that is the difference
+    // between one 5 s poll and a pile-up of them.
+    let state = state.inner().clone();
+    tokio::task::spawn_blocking(move || status_snapshot(&state, &cfg, seal))
+        .await
+        .map_err(|e| format!("status task: {e}"))
 }
 
 #[tauri::command]
@@ -348,7 +373,9 @@ async fn mcp_mint_token(
 /// the clipboard until the person copies it.
 #[tauri::command]
 fn make_passphrase(options: passphrase::Options) -> Result<passphrase::Made, String> {
-    let made = passphrase::make(&options)?;
+    let mut cfg = load_config()?;
+    let salt = ensure_install_salt(&mut cfg);
+    let made = passphrase::make_with(&options, &salt)?;
     // Only the shape is recorded. The value stays out of the log.
     crate::log_info!(
         "passphrase: {} palabras, {:.1} bits, {} caracteres",
@@ -357,6 +384,49 @@ fn make_passphrase(options: passphrase::Options) -> Result<passphrase::Made, Str
         made.length
     );
     Ok(made)
+}
+
+/// The per-installation salt, generated once and stored in `config.json`.
+///
+/// It is **not** a secret and adds no entropy: it rotates the vocabulary
+/// mapping, so two machines cloned from the same snapshot still draw different
+/// words. A failure to generate or decode it degrades to "no salt" instead of
+/// blocking the passphrase.
+fn ensure_install_salt(cfg: &mut AppConfig) -> Vec<u8> {
+    if cfg.install_salt.trim().is_empty() {
+        let mut bytes = [0u8; 16];
+        if crate::rand::fill(&mut bytes).is_ok() {
+            cfg.install_salt = bytes.iter().map(|b| format!("{b:02x}")).collect();
+            if let Err(e) = save_config(cfg) {
+                crate::log_warn!("no pude guardar el salt de instalación: {e}");
+            }
+        }
+    }
+    let salt = decode_hex(&cfg.install_salt);
+    if salt.is_empty() && !cfg.install_salt.trim().is_empty() {
+        crate::log_warn!("installSalt inválido: se ignora");
+    }
+    salt
+}
+
+/// Hex → bytes, strict. `Vec::new()` for anything that is not an even-length
+/// run of hex digits, so a hand-edited config cannot inject a weird salt.
+fn decode_hex(raw: &str) -> Vec<u8> {
+    let raw = raw.trim();
+    if raw.is_empty() || raw.len() % 2 != 0 {
+        return Vec::new();
+    }
+    let bytes = raw.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len() / 2);
+    for pair in bytes.chunks_exact(2) {
+        let hi = (pair[0] as char).to_digit(16);
+        let lo = (pair[1] as char).to_digit(16);
+        match (hi, lo) {
+            (Some(h), Some(l)) => out.push((h * 16 + l) as u8),
+            _ => return Vec::new(),
+        }
+    }
+    out
 }
 
 /// The stored passphrase style, so the window can render the settings it
@@ -432,7 +502,7 @@ async fn seal_vault() -> Result<SealStatusDto, String> {
     seal_vault_now(&cfg).await
 }
 
-/// Fire one header LED â€” what a click does. `dir` = `flip` (default) | `on` |
+/// Fire one header LED — what a click does. `dir` = `flip` (default) | `on` |
 /// `off` | `alt`. The caller names the LED and the direction; which action that
 /// means is read from the config (see `toggles::fire`).
 #[tauri::command]
@@ -459,7 +529,7 @@ async fn bootstrap(state: State<'_, Arc<AppState>>) -> Result<BootstrapResult, S
     let mut synced = None;
     let mut parts = Vec::new();
 
-    // Check service status (do NOT auto-start â€” let the user decide)
+    // Check service status (do NOT auto-start — let the user decide)
     let svc = winservice::status();
     if svc.installed && !svc.running {
         parts.push(format!("svc: {} (detenido)", svc.state));
@@ -471,13 +541,13 @@ async fn bootstrap(state: State<'_, Arc<AppState>>) -> Result<BootstrapResult, S
 
     let mut seal = seal_status(&cfg).await;
     if !seal.reachable {
-        // No auto-start here â€” just report it
+        // No auto-start here — just report it
         return Ok(BootstrapResult {
             seal,
             token_loaded: false,
             unsealed_now: false,
             synced: None,
-            message: "OpenBao API no responde â€” revisa servicio OpenBao".into(),
+            message: "OpenBao API no responde — revisa servicio OpenBao".into(),
         });
     }
 
@@ -487,7 +557,7 @@ async fn bootstrap(state: State<'_, Arc<AppState>>) -> Result<BootstrapResult, S
                 token_loaded = true;
                 parts.push("token OK".into());
             }
-            Ok(false) => parts.push("token ya habÃ­a".into()),
+            Ok(false) => parts.push("token ya había".into()),
             Err(e) => parts.push(format!("token: {e}")),
         }
     }
@@ -519,7 +589,7 @@ async fn bootstrap(state: State<'_, Arc<AppState>>) -> Result<BootstrapResult, S
     let message = if parts.is_empty() {
         seal.message.clone()
     } else {
-        parts.join(" Â· ")
+        parts.join(" · ")
     };
 
     Ok(BootstrapResult {
@@ -575,7 +645,7 @@ async fn qring_control(action: String) -> Result<qring::QringControlDto, String>
         act.as_str(),
         "on" | "enable" | "start" | "restart" | "rerun" | "re-run" | "toggle"
     );
-    // Toggle-off does not need the vault; toggle-on does â€” probe first.
+    // Toggle-off does not need the vault; toggle-on does — probe first.
     let will_start = match act.as_str() {
         "toggle" => !qring::status(&cfg.qring_pack, &cfg.qring_host).running,
         "off" | "disable" | "stop" => false,
@@ -605,7 +675,7 @@ const REVEAL_BACKSTOP_MS: u64 = 4_000;
 
 /// The other half of `visible: false`.
 ///
-/// Creating the window hidden is what makes a jump-free start possible â€” the UI
+/// Creating the window hidden is what makes a jump-free start possible — the UI
 /// reveals it only after restoring the remembered spot, so the OS default
 /// position is never on screen. But a widget with `skipTaskbar` and no tray
 /// icon has no way back if the webview never gets that far (JS error before the
@@ -615,14 +685,14 @@ fn arm_reveal_backstop(win: tauri::WebviewWindow) {
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_millis(REVEAL_BACKSTOP_MS));
         if !matches!(win.is_visible(), Ok(true)) {
-            crate::log_warn!("la UI no avisÃ³ de que estaba lista; muestro la ventana igual");
+            crate::log_warn!("la UI no avisó de que estaba lista; muestro la ventana igual");
             let _ = win.show();
         }
     });
 }
 
 /// Where the widget opened last time; `None` on a first run (or an unreadable
-/// file â€” never a reason to hold up a launch).
+/// file — never a reason to hold up a launch).
 #[tauri::command]
 fn get_placement() -> Option<placement::Placement> {
     placement::load()
@@ -635,7 +705,7 @@ fn save_placement(placement: placement::Placement) -> Result<(), String> {
     placement::save(&placement)
 }
 
-/// Reveal the window â€” see `arm_reveal_backstop`.
+/// Reveal the window — see `arm_reveal_backstop`.
 /// The committee's notices, as the pill's counter and the Avisos panel need
 /// them: the tail of `steering-notices.jsonl` plus how many lines are still
 /// unseen. Never fails: a missing or half-written file is "no notices", not a
@@ -660,14 +730,14 @@ fn show_window(app: tauri::AppHandle) {
 }
 
 /// Is the left mouse button still held? `None` where the platform cannot tell
-/// (macOS for now) so the UI falls back to deciding immediately â€” see `pointer`.
+/// (macOS for now) so the UI falls back to deciding immediately — see `pointer`.
 #[tauri::command]
 fn pointer_left_down() -> Option<bool> {
     pointer::left_button_down()
 }
 
-/// The machine's regional locale (`en-US`, `es-ES`â€¦). Picks the language of the
-/// labels â€” see `locale`.
+/// The machine's regional locale (`en-US`, `es-ES`…). Picks the language of the
+/// labels — see `locale`.
 #[tauri::command]
 fn system_locale() -> String {
     locale::user_locale()
@@ -687,7 +757,7 @@ pub(crate) async fn sync_index_inner(state: &AppState) -> Result<usize, String> 
 // The flat parameter list is the wire contract: the settings form sends these
 // by name, one key per field (`invoke("save_settings", { baoAddr, ... })`).
 // Grouping them into a DTO would change what every caller has to send for a
-// lint, so the lint is silenced here instead â€” deliberately, and only here.
+// lint, so the lint is silenced here instead — deliberately, and only here.
 #[allow(clippy::too_many_arguments)]
 fn save_settings(
     bao_addr: String,
@@ -702,11 +772,25 @@ fn save_settings(
     init_path: Option<String>,
     toggles: Option<Vec<toggles::ToggleSpec>>,
     mcp_servers: Option<Vec<mcp::McpServer>>,
+    services: Option<Vec<services::ServiceSpec>>,
 ) -> Result<(), String> {
     // `load_config_raw`, not `load_config`: the fallback defaults for omitted
     // fields must come from the file, never from a per-launch `EDGEPASS_*`
     // override that would then get written to disk as a real setting.
     let prev = load_config_raw().unwrap_or_default();
+    // Validate against the *incoming* inventory: a save can add a service and
+    // the LED that watches it in the same round trip, so `toggles` has to see
+    // the services being stored, not only the ones already in the file.
+    let next_services = match services {
+        Some(list) => crate::services::validate(list)?,
+        None => prev.services.clone(),
+    };
+    let mut with_services = prev.clone();
+    with_services.services = next_services.clone();
+    let next_toggles = match toggles {
+        Some(list) => Some(crate::toggles::validate(&with_services, list)?),
+        None => None,
+    };
     let mut cfg = AppConfig {
         bao_addr: bao_addr.trim().trim_end_matches('/').to_string(),
         mount: mount.trim().trim_matches('/').to_string(),
@@ -732,15 +816,14 @@ fn save_settings(
         // The header LEDs are a whole list owned by the editor: validate what
         // arrives (ids against the catalog, the LED cap) and keep the stored one
         // when the caller does not send it at all.
-        toggles: match toggles {
-            Some(list) => crate::toggles::validate(list)?,
-            None => prev.toggles,
-        },
+        toggles: next_toggles.unwrap_or(prev.toggles),
         // Same deal for the MCP list: it is owned by the MCP panel.
         mcp_servers: match mcp_servers {
             Some(list) => crate::mcp::validate(list)?,
             None => prev.mcp_servers,
         },
+        // …and for the owner's services: the Servicios editor sends the whole list.
+        services: next_services,
         // Y lo mismo para el runner local de GHA y sus rutas: los lleva el LED GW y
         // el script `gha-local.ps1`, no el formulario de Ajustes — así que un
         // *Guardar* no los borra.
@@ -755,6 +838,8 @@ fn save_settings(
         // The passphrase style has its own command (`save_passphrase_config`):
         // a Guardar in Ajustes must not reset it to the defaults.
         passphrase: prev.passphrase,
+        // The install salt belongs to the machine, not to the form.
+        install_salt: prev.install_salt,
         config_version: config::CONFIG_VERSION,
     };
     if cfg.mount.is_empty() {
@@ -808,7 +893,7 @@ fn search(
     query: String,
     limit: Option<usize>,
 ) -> Result<Vec<SearchHit>, String> {
-    // Search is local index only â€” no need to open vault.
+    // Search is local index only — no need to open vault.
     let store = state.store.lock();
     store.search(&query, limit.unwrap_or(80))
 }
@@ -855,8 +940,8 @@ async fn reveal_and_copy(
     } else {
         namespace.as_str()
     };
-    crate::log_info!("copiado {ns}/{path} Â· {key}");
-    Ok(format!("{ns}/{path} Â· {key}"))
+    crate::log_info!("copiado {ns}/{path} · {key}");
+    Ok(format!("{ns}/{path} · {key}"))
 }
 
 #[derive(Debug, Serialize)]
@@ -975,8 +1060,8 @@ async fn delete_secret(
         .map_err(|e| e.to_string())?;
     let _ = sync_index_inner(state.inner()).await;
     let label_ns = if ns.is_empty() { "root" } else { ns.as_str() };
-    crate::log_info!("borrado {label_ns}/{path} Â· {key}");
-    Ok(format!("Borrado {label_ns}/{path} Â· {key}"))
+    crate::log_info!("borrado {label_ns}/{path} · {key}");
+    Ok(format!("Borrado {label_ns}/{path} · {key}"))
 }
 
 #[tauri::command]
@@ -1000,7 +1085,7 @@ async fn upsert_secret(
         return Err("path y key son requeridos".into());
     }
     if value.is_empty() {
-        return Err("value no puede estar vacÃ­o".into());
+        return Err("value no puede estar vacío".into());
     }
 
     upsert_secret_field(
@@ -1017,7 +1102,7 @@ async fn upsert_secret(
 
     let _ = sync_index_inner(state.inner()).await;
     let label_ns = if ns.is_empty() { "root" } else { ns.as_str() };
-    Ok(format!("OK {label_ns}/{path} Â· {key}"))
+    Ok(format!("OK {label_ns}/{path} · {key}"))
 }
 
 #[tauri::command]
@@ -1090,7 +1175,7 @@ async fn upsert_secret_batch(
     }
     let _ = sync_index_inner(state.inner()).await;
     let label_ns = if ns.is_empty() { "root" } else { ns.as_str() };
-    Ok(format!("OK {label_ns}/{path} Â· {} keys", names.len()))
+    Ok(format!("OK {label_ns}/{path} · {} keys", names.len()))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1177,7 +1262,7 @@ async fn import_logins(
     let _ = sync_index_inner(state.inner()).await;
     crate::log_info!("import logins: {imported} ok, {skipped} omitidos");
     Ok(LoginImportResult {
-        message: format!("Importados {imported} Â· omitidos {skipped}"),
+        message: format!("Importados {imported} · omitidos {skipped}"),
         imported,
         skipped,
         paths,
@@ -1221,7 +1306,7 @@ fn path_or_dash(path: Result<std::path::PathBuf, String>) -> String {
 
 /// Everything needed to debug a bad install in one call: which binary is
 /// actually running, where its files live, what the vault and the Windows
-/// service look like, and the tail of the log. The DiagnÃ³stico panel renders
+/// service look like, and the tail of the log. The Diagnóstico panel renders
 /// it and copies it as a report.
 #[tauri::command]
 async fn diagnostics(state: State<'_, Arc<AppState>>) -> Result<DiagnosticsDto, String> {
@@ -1295,7 +1380,7 @@ fn webview2_version() -> String {
             }
         }
     }
-    "no encontrado (Â¿WebView2 Runtime instalado?)".into()
+    "no encontrado (¿WebView2 Runtime instalado?)".into()
 }
 
 #[cfg(not(windows))]
@@ -1303,7 +1388,7 @@ fn webview2_version() -> String {
     "n/a".into()
 }
 
-/// The DiagnÃ³stico panel copies through here, so the frontend needs no
+/// The Diagnóstico panel copies through here, so the frontend needs no
 /// clipboard binding of its own.
 #[tauri::command]
 fn copy_to_clipboard(app: tauri::AppHandle, text: String) -> Result<(), String> {
@@ -1328,7 +1413,7 @@ fn spawn_vault_guardian(state: Arc<AppState>) {
             }
 
             // Auto-open if somehow sealed and we want it ready for upcoming use
-            // is NOT done here â€” only on demand via ensure_ready.
+            // is NOT done here — only on demand via ensure_ready.
             // Auto-close when idle:
             // A caller asked us to keep it open for a while.
             if now_secs() < state.hold_until.load(Ordering::Relaxed) {
@@ -1348,7 +1433,7 @@ fn spawn_vault_guardian(state: Arc<AppState>) {
                                     );
                                 }
                                 Ok(_) => {}
-                                Err(e) => crate::log_error!("auto-seal fallÃ³: {e}"),
+                                Err(e) => crate::log_error!("auto-seal falló: {e}"),
                             }
                         }
                     }
@@ -1542,6 +1627,7 @@ pub fn run() {
             load_token_from_init,
             bootstrap,
             save_settings,
+            validate_services,
             clear_token,
             sync_index,
             search,
@@ -1579,5 +1665,19 @@ pub fn run() {
 
     if let Err(e) = result {
         crate::log_error!("error fatal al correr edgePass: {e}");
+    }
+}
+
+#[cfg(test)]
+mod salt_tests {
+    use super::decode_hex;
+
+    #[test]
+    fn hex_round_trips_and_rejects_noise() {
+        assert_eq!(decode_hex("00ff10"), vec![0x00, 0xff, 0x10]);
+        assert_eq!(decode_hex(" 0A0b "), vec![0x0a, 0x0b]);
+        assert!(decode_hex("0").is_empty(), "largo impar");
+        assert!(decode_hex("zz").is_empty(), "no es hex");
+        assert!(decode_hex("").is_empty());
     }
 }

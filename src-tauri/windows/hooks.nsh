@@ -11,4 +11,9 @@
 !macro NSIS_HOOK_PREUNINSTALL
   DetailPrint "Quitando la tarea de arranque al logon (edgePass)..."
   Exec 'schtasks.exe /Delete /TN "edgePass" /F'
+  ; El token vive en el Credential Manager (keyring: servicio edgepass, usuario
+  ; bao_token), no en un archivo: el desinstalador tiene que borrarlo o queda una
+  ; credencial de un vault que ya no está en la máquina.
+  DetailPrint "Quitando el token de OpenBao del Credential Manager..."
+  Exec 'cmdkey.exe /delete:bao_token.edgepass'
 !macroend

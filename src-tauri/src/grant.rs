@@ -643,19 +643,19 @@ mod tests {
     #[test]
     fn two_hour_grant_matches_same_path_only() {
         let board = GrantBoard::new();
-        let first = parsed("Grok", "buenaidee", "projects/cb2/infisical", "npm");
+        let first = parsed("Grok", "integraciones", "projects/cb2/infisical", "npm");
         let a = board.submit(first).unwrap();
         assert_eq!(a.state, RequestState::Pending);
         let run = board.begin_allow(&a.id, true).unwrap();
         assert_eq!(run["op"], "run");
         board.finish(&a.id, json!({"ok":true,"code":0,"env":["DATABASE_URL"],"stdout":"SECRET=leak"}));
 
-        let again = parsed("grok", "buenaidee", "projects/cb2/infisical", "npm");
+        let again = parsed("grok", "integraciones", "projects/cb2/infisical", "npm");
         let b = board.submit(again).unwrap();
         assert_eq!(b.state, RequestState::Running);
         assert!(b.run_req.is_some());
 
-        let other = parsed("grok", "buenaidee", "projects/other/infisical", "npm");
+        let other = parsed("grok", "integraciones", "projects/other/infisical", "npm");
         let c = board.submit(other).unwrap();
         assert_eq!(c.state, RequestState::Pending);
         assert!(c.run_req.is_none());
@@ -705,7 +705,7 @@ mod tests {
         assert_eq!(norm_ns(""), "");
         assert_eq!(norm_ns("."), "");
         assert_eq!(norm_ns("root"), "");
-        assert_eq!(norm_ns("buenaidee"), "buenaidee");
+        assert_eq!(norm_ns("integraciones"), "integraciones");
         assert_eq!(norm_path("/projects/x/"), "projects/x");
         assert_eq!(norm_actor("Grok"), "grok");
     }

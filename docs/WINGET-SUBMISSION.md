@@ -1,56 +1,58 @@
-# Manifiesto de winget: qué pidió Microsoft
+# winget manifest: what Microsoft asked for
 
-Registro de la primera sumisión, PR [microsoft/winget-pkgs#472420](https://github.com/microsoft/winget-pkgs/pull/472420).
-Fecha: 6 de noviembre de 2026.
+Record of the first submission, PR
+[microsoft/winget-pkgs#472420](https://github.com/microsoft/winget-pkgs/pull/472420).
+Date: 6 November 2026.
 
-## Lo que respondió Microsoft
+## What Microsoft answered
 
-### 1. Falta el acuerdo de licencia (CLA)
+### 1. The Contributor License Agreement (CLA) is missing
 
-Estado del chequeo: `license/cla` en cola. El bot dice:
+Check status: `license/cla` queued. The bot says:
 
 > This PR cannot be merged until you sign the Contributor License Agreement (CLA).
 
-El arreglo escribe un comentario desde la cuenta dueña del PR:
+The fix is a comment from the account that owns the PR:
 
 ```
 @microsoft-github-policy-service agree
 ```
 
-Solo lo puede hacer la persona dueña de la cuenta. Es un acuerdo legal, no un trámite técnico.
-Si la contribución se hace por una empresa, la forma es `agree company="Nombre"`.
+Only the account owner can do it. It is a legal agreement, not a technical step.
+If the contribution is made by a company, the form is `agree company="Name"`.
 
-### 2. El manifiesto singleton no sirve
+### 2. The singleton manifest does not work
 
-Chequeo `02. Manifest Validation`: falló en 16 segundos.
+Check `02. Manifest Validation`: failed in 16 seconds.
 
 > `Manifest type not supported. ManifestType: singleton`.
 
-El catálogo comunitario exige un juego de tres archivos, cada uno con su `ManifestType`:
+The community catalog requires a set of three files, each with its own
+`ManifestType`:
 
-| Archivo | `ManifestType` |
+| File | `ManifestType` |
 |---|---|
 | `Xhuk.EdgePass.yaml` | `version` |
 | `Xhuk.EdgePass.locale.en-US.yaml` | `defaultLocale` |
 | `Xhuk.EdgePass.installer.yaml` | `installer` |
 
-Ese diagnóstico vino de un asistente marcado como experimental. Lo verifiqué contra
-`docs/Authoring.md` del catálogo: el juego de tres archivos es el formato esperado.
+That diagnosis came from an assistant marked experimental. It was verified against
+the catalog's `docs/Authoring.md`: the three-file set is the expected format.
 
-## Una trampa que vale registrar
+## A trap worth recording
 
-`winget validate` **acepta** un singleton y responde "Manifest validation succeeded".
-El catálogo no lo acepta. Validar en local no prueba que el PR vaya a pasar.
-La única prueba real es el chequeo del PR.
+`winget validate` **accepts** a singleton and answers "Manifest validation
+succeeded". The catalog does not accept it. Validating locally does not prove the
+PR will pass. The only real test is the PR check.
 
-## Estado
+## Status
 
-| Paso | Estado |
+| Step | Status |
 |---|---|
-| Tres manifiestos escritos | hecho, en `packaging/winget/` |
-| `winget validate` sobre el juego completo | hecho: "Manifest validation succeeded" |
-| Acuerdo de licencia firmado | **pendiente, lo hace la persona dueña de la cuenta** |
-| PR con la versión 0.3.1 | pendiente |
+| Three manifests written | done, in `packaging/winget/` |
+| `winget validate` on the full set | done: "Manifest validation succeeded" |
+| License agreement signed | **pending, done by the account owner** |
+| PR with 0.5.0 | pending |
 
-El PR 472420 apunta a la versión 0.3.0 y queda obsoleto. Cuando el CLA esté firmado,
-se envía la 0.3.1 con el juego de tres archivos.
+PR 472420 targets 0.3.0 and is obsolete. Once the CLA is signed, 0.5.0 is sent
+with the three-file set.

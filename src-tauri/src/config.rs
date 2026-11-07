@@ -13,22 +13,11 @@ const TOKEN_CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(20);
 static TOKEN_CACHE: parking_lot::Mutex<Option<(std::time::Instant, Option<String>)>> =
     parking_lot::Mutex::new(None);
 
-#[cfg(windows)]
-fn default_init_path() -> String {
-    r"C:\proyectos\secrets\OpenBao\openbao-init.json".into()
-}
-
-#[cfg(not(windows))]
-fn default_init_path() -> String {
-    dirs::home_dir()
-        .map(|h| {
-            h.join("proyectos/secrets/OpenBao/openbao-init.json")
-                .to_string_lossy()
-                .into_owned()
-        })
-        .unwrap_or_else(|| "~/proyectos/secrets/OpenBao/openbao-init.json".into())
-}
-
+/// The vault init file, **known only when the user configures it**.
+///
+/// A public binary carries no paths of the machine it was built on: an install
+/// starts with this empty and Ajustes → Vault asks for it (or the user pastes a
+/// token directly). It is remembered only because the user typed it.
 fn default_true() -> bool {
     true
 }
@@ -73,10 +62,14 @@ pub struct AppConfig {
     pub auto_sync: bool,
     #[serde(default = "default_true")]
     pub auto_load_token: bool,
-    #[serde(default = "default_init_path")]
+    /// Path to the vault init file (unseal keys + root token), only if the user
+    /// gave one: empty = not configured, and Ajustes → Vault asks for it. A
+    /// token can also be pasted directly, in which case this stays empty.
+    #[serde(default)]
     pub init_path: String,
     /// Absolute path to the Q-ring pack (`qring.py` + `bin/qringd.exe`).
-    /// Empty = `C:\proyectos\hermes-q-ring-pack` or `EDGEPASS_QRING_PACK`.
+    /// Empty = the integration is off: no default hides in the binary. Set it
+    /// here or via `EDGEPASS_QRING_PACK`.
     #[serde(default)]
     pub qring_pack: String,
     /// Gate host for `qring.py enable|disable`. Empty = pack parent / env.
@@ -105,6 +98,14 @@ pub struct AppConfig {
     /// widget — which is already launched at logon by the `edgePass` task.
     #[serde(default)]
     pub mcp_servers: Vec<crate::mcp::McpServer>,
+    /// Owner-defined services behind a LED (see the `services` module).
+    ///
+    /// Each row is one thing this machine runs that the binary does not know
+    /// about: a container, a local API, a tunnel. The derived probe is
+    /// `svc.<id>` and the derived actions are `svc.<id>.on` / `.off`, so a
+    /// `toggles[]` row can name any of them without the exe changing.
+    #[serde(default)]
+    pub services: Vec<crate::services::ServiceSpec>,
     /// Local GitHub-Actions runners this widget keeps alive (see the `gha` module).
     ///
     /// Generic on purpose: the image is reusable, so a project is a row — repo, labels
@@ -114,7 +115,8 @@ pub struct AppConfig {
     #[serde(default)]
     pub gha_runners: Vec<crate::gha::GhaRunnerSpec>,
     /// Where the runner's `Dockerfile` + compose live (the assets ship with the repo).
-    /// Empty = `C:\proyectos\edgePass\docker\gha-local` or `EDGEPASS_GHA_DIR`.
+    /// Empty = not configured: the runner actions refuse with that message instead
+    /// of guessing a directory. Set it here or via `EDGEPASS_GHA_DIR`.
     #[serde(default)]
     pub gha_dir: String,
     /// Docker Desktop's binary, started when the engine does not answer. Empty =
@@ -122,7 +124,8 @@ pub struct AppConfig {
     #[serde(default)]
     pub docker_desktop_exe: String,
     /// DaemonCurier's widget (the WSL2/system HUD the `GW` alt opens). Empty =
-    /// `C:\proyectos\deaemonCurier\DaemonCurier.exe` or `EDGEPASS_DAEMONCURIER`.
+    /// not configured: "open" refuses with that message. Set it here or via
+    /// `EDGEPASS_DAEMONCURIER`.
     #[serde(default)]
     pub daemoncurier_exe: String,
     /// `cloudflared` binary, used to run the named tunnels an MCP row declares
@@ -151,6 +154,13 @@ pub struct AppConfig {
     /// once and remembers. Until then the defaults apply but the UI still asks.
     #[serde(default)]
     pub passphrase: crate::passphrase::PassphraseConfig,
+    /// Per-installation salt (hex, 16 bytes) mixed into the passphrase draw.
+    ///
+    /// Not a secret and not extra entropy: it rotates the vocabulary mapping so
+    /// two machines cloned from the same snapshot do not draw the same words.
+    /// Generated on the first passphrase and kept here; empty = not generated.
+    #[serde(default)]
+    pub install_salt: String,
 }
 
 impl Default for AppConfig {
@@ -164,12 +174,13 @@ impl Default for AppConfig {
             auto_collapse_idle_secs: default_collapse_idle_secs(),
             auto_sync: true,
             auto_load_token: true,
-            init_path: default_init_path(),
+            init_path: String::new(),
             qring_pack: String::new(),
             qring_host: String::new(),
             qring_governed: true,
             toggles: toggles::default_toggles(),
             mcp_servers: Vec::new(),
+            services: Vec::new(),
             gha_runners: Vec::new(),
             gha_dir: String::new(),
             docker_desktop_exe: String::new(),
@@ -177,6 +188,7 @@ impl Default for AppConfig {
             cloudflared_exe: String::new(),
             gha_watch: true,
             passphrase: crate::passphrase::PassphraseConfig::default(),
+            install_salt: String::new(),
             config_version: CONFIG_VERSION,
         }
     }
@@ -184,6 +196,20 @@ impl Default for AppConfig {
 
 pub fn data_dir() -> Result<PathBuf, String> {
     let base = dirs::data_dir().ok_or("could not resolve data dir")?;
+    let dir = base.join("edgePass");
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir)
+}
+
+/// Machine-local data: the index, the logs and the placement.
+///
+/// `%APPDATA%` roams with the profile; a SQLite index and a 4 MB log should not
+/// travel to another machine. Config and the keychain entry stay in [`data_dir`]
+/// (they are the things a person expects to follow them).
+pub fn local_data_dir() -> Result<PathBuf, String> {
+    let base = dirs::data_local_dir()
+        .or_else(dirs::data_dir)
+        .ok_or("could not resolve local data dir")?;
     let dir = base.join("edgePass");
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir)
@@ -247,15 +273,26 @@ fn render_config(cfg: &AppConfig, path: &Path) -> Result<String, String> {
 pub fn load_config_at(path: &Path) -> Result<AppConfig, String> {
     let raw = fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
     let mut cfg = parse_config(&raw, path)?;
-    if cfg.init_path.is_empty() {
-        cfg.init_path = default_init_path();
-    }
     migrate(&mut cfg);
     Ok(cfg)
 }
 
 pub fn db_path() -> Result<PathBuf, String> {
-    Ok(data_dir()?.join("edgepass.db"))
+    let path = local_data_dir()?.join("edgepass.db");
+    // Upgrade from <= 0.4.x, where the index lived in Roaming. Move it once so
+    // the first launch after the update does not reindex from scratch.
+    if !path.exists() {
+        if let Ok(old) = data_dir().map(|dir| dir.join("edgepass.db")) {
+            if old.exists() {
+                if fs::rename(&old, &path).is_err() {
+                    let _ = fs::copy(&old, &path);
+                    let _ = fs::remove_file(&old);
+                }
+                crate::log_info!("índice movido a %LOCALAPPDATA%\\edgePass");
+            }
+        }
+    }
+    Ok(path)
 }
 
 /// Config as the runtime should see it: file + one-time migration + the
@@ -362,7 +399,7 @@ where
     applied
 }
 
-/// Same syntax as the Ajustes field: `., dokploy` (`.` = root + every child ns).
+/// Same syntax as the Ajustes field: `.`, `integraciones` (`.` = root + every child ns).
 fn parse_namespaces(raw: &str) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
     raw.split(',')
@@ -512,6 +549,12 @@ pub fn bootstrap_token_from_init(init_path: &str) -> Result<bool, String> {
     if has_token() {
         return Ok(false);
     }
+    if init_path.trim().is_empty() {
+        return Err(
+            "el init del vault no está configurado: definí Init JSON o pegá un token manual en Ajustes → Vault"
+                .into(),
+        );
+    }
     let path = PathBuf::from(init_path);
     if !path.exists() {
         return Err(format!("init file not found: {init_path}"));
@@ -627,10 +670,10 @@ mod tests {
         assert_eq!(cfg.toggles[1].alt.as_deref(), Some("qring.restart"));
     }
 
-    /// …while an install that never had a file gets the open-source default: the
-    /// vault LED only (the Q-ring pair is addable from the catalog).
+    /// …while an install that never had a file gets the one light every install
+    /// can justify: the vault, because OpenBao is a prerequisite.
     #[test]
-    fn a_fresh_config_ships_only_the_vault_led() {
+    fn a_fresh_config_ships_the_vault_led() {
         let cfg = AppConfig::default();
         assert_eq!(cfg.toggles.len(), 1);
         assert_eq!(cfg.toggles[0].id, "kv");
@@ -656,12 +699,12 @@ mod tests {
             env_from(&[
                 ("EDGEPASS_AUTO_UNSEAL", " off "),
                 ("EDGEPASS_AUTO_SEAL_IDLE", "120"),
-                ("EDGEPASS_NAMESPACES", "., buenaidee , dokploy"),
+                ("EDGEPASS_NAMESPACES", "., integraciones , facturas"),
             ]),
         );
         assert!(!cfg.auto_unseal);
         assert_eq!(cfg.auto_seal_idle_secs, 120);
-        assert_eq!(cfg.namespaces, vec!["", "buenaidee", "dokploy"]);
+        assert_eq!(cfg.namespaces, vec!["", "integraciones", "facturas"]);
         assert_eq!(applied.len(), 3);
     }
 
@@ -687,8 +730,8 @@ mod tests {
     fn namespaces_parse_like_the_settings_field() {
         assert_eq!(parse_namespaces("."), vec![""]);
         assert_eq!(
-            parse_namespaces(" buenaidee , dokploy "),
-            vec!["buenaidee", "dokploy"]
+            parse_namespaces(" integraciones , facturas "),
+            vec!["integraciones", "facturas"]
         );
         assert_eq!(parse_namespaces("a,a,."), vec!["a", ""]);
     }

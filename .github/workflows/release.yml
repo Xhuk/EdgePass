@@ -1,0 +1,83 @@
+name: Release
+
+# A tag is the release: v0.5.0 builds the portable exe, signs it when a
+# certificate is configured, and publishes edgepass.exe + SHA256SUMS.txt.
+# Bump the three version fields (package.json, src-tauri/Cargo.toml,
+# src-tauri/tauri.conf.json) in the same commit as the tag.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '["windows-latest"]') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Build (portable exe + NSIS installer)
+        # Both channels in one run: Scoop consumes the raw exe, winget the NSIS
+        # setup. `--bundles nsis` still produces the portable binary.
+        run: npx tauri build --bundles nsis
+
+      - name: Sign (when a certificate is configured)
+        shell: pwsh
+        env:
+          CERT: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+          CERT_PASS: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:CERT)) {
+            Write-Host "No WINDOWS_CERT_PFX_BASE64 secret: leaving the binaries unsigned."
+            exit 0
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP "edgepass.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:CERT))
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
+            Where-Object { $_.FullName -match 'x64' } |
+            Select-Object -Last 1 -ExpandProperty FullName
+          $targets = @("src-tauri\target\release\edgepass.exe") +
+            @(Get-ChildItem "src-tauri\target\release\bundle\nsis\*-setup.exe" | Select-Object -ExpandProperty FullName)
+          foreach ($target in $targets) {
+            Write-Host "signing $target"
+            & $signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f $pfx /p $env:CERT_PASS $target
+            if ($LASTEXITCODE -ne 0) { throw "signtool failed with $LASTEXITCODE on $target" }
+          }
+          Remove-Item $pfx -Force
+
+      - name: Checksum
+        shell: pwsh
+        run: |
+          $exe = "src-tauri/target/release/edgepass.exe"
+          $setup = Get-ChildItem "src-tauri/target/release/bundle/nsis/*-setup.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not (Test-Path $exe)) { throw "missing $exe" }
+          if (-not $setup) { throw "missing the NSIS setup" }
+          $lines = @(
+            "$((Get-FileHash $exe -Algorithm SHA256).Hash.ToLower())  edgepass.exe",
+            "$((Get-FileHash $setup.FullName -Algorithm SHA256).Hash.ToLower())  $($setup.Name)"
+          )
+          $lines | Set-Content -Encoding ascii SHA256SUMS.txt
+          Get-Content SHA256SUMS.txt
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            src-tauri/target/release/edgepass.exe
+            src-tauri/target/release/bundle/nsis/*-setup.exe
+            SHA256SUMS.txt

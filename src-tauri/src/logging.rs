@@ -29,7 +29,9 @@ static WRITTEN: AtomicU64 = AtomicU64::new(0);
 static LOGGER: OnceLock<Mutex<Option<File>>> = OnceLock::new();
 
 pub fn log_dir() -> PathBuf {
-    crate::config::data_dir()
+    // Local, not Roaming: a 4 MB log does not belong in the synced profile.
+    crate::config::local_data_dir()
+        .or_else(|_| crate::config::data_dir())
         .unwrap_or_else(|_| PathBuf::from("."))
         .join("logs")
 }
