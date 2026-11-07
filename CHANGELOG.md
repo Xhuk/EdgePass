@@ -4,7 +4,7 @@ All notable changes to edgePass. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are
 `MAJOR.MINOR.PATCH` and a release is a `vX.Y.Z` tag in this repo.
 
-## 0.5.0 — 2026-11-06
+## 0.5.0 — 2026-11-07
 
 ### Added
 
