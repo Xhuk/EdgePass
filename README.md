@@ -1,4 +1,4 @@
-# edgePass
+# edgePass — a local OpenBao console for Windows
 
 A desktop widget that administers a local **OpenBao** vault and hands secrets to
 processes without ever printing them.
@@ -137,6 +137,13 @@ This project was developed against **Kiri** as the local container engine and
 ## Status
 
 `0.5.1`. Early. Not audited. Interfaces can change between minor versions.
+
+## Name
+
+`edgePass` is also the name of a mobile puzzle (Google Play and the App Store),
+the Blue Water Bridge pass, Thorlabs' edgepass optical filters and a McGraw Hill
+course. This project is none of those: it is a local OpenBao console for Windows.
+The code is MIT; the name is used descriptively, with no affiliation.
 
 ## License
 
