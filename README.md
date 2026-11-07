@@ -10,6 +10,22 @@ secrets from a vault that runs on the same machine.
 > **Read [DISCLAIMER.md](DISCLAIMER.md) first.** This software manages credentials.
 > A mistake can expose or destroy them.
 
+## Who this is for
+
+People building with AI agents on **Windows** — the vibe-coding workflow where a
+chat, a CLI agent or an IDE assistant writes the code and runs the commands. The
+problem shows up early: a key ends in a `.env`, a chat message, a command line or
+a screenshot. edgePass gives the agent a way to *use* a secret without ever seeing
+it: the human copies it in the widget (`meter`), or the child process gets it in
+its environment (`run`).
+
+You do not need to know Vault. Install OpenBao once, initialize it and paste a
+token. The app and the `openbao-bootstrap` skill walk you through it.
+
+**Scope: Windows first.** macOS and Linux are ports, not build flags; see below.
+Windows is where the widget, the agent pipe, the scheduled task and the process
+probes are implemented and tested today.
+
 ## What it does
 
 - Lists, searches and copies secrets from a local OpenBao (KV v1 and v2).
