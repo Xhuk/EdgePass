@@ -169,6 +169,15 @@
   .foot-links a { color: var(--ink-soft); text-decoration: none; }
   .foot-links a:hover { text-decoration: underline; }
   .fine { max-width: 78ch; }
+  @media (max-width: 700px) {
+    .nav-inner { flex-wrap: nowrap; gap: .9rem; }
+    .nav-links {
+      flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none;
+      -webkit-overflow-scrolling: touch; padding-bottom: 2px;
+    }
+    .nav-links::-webkit-scrollbar { display: none; }
+    .nav-links a { white-space: nowrap; }
+  }
   @media (prefers-reduced-motion: reduce) { .btn { transition: none; } .btn:hover { transform: none; } }
 </style>
 </head>
