@@ -70,6 +70,12 @@ pub struct Notices {
     pub unseen: usize,
     /// Everything the file holds, so the panel can say "50 of 213".
     pub total: usize,
+    /// The `.jsonl` exists on this machine. False means the two writer scripts
+    /// are not installed, which is the normal state of a fresh public install:
+    /// the panel then hides the tab instead of showing internal vocabulary
+    /// (comité, hook, watcher, board) to someone who has none of it.
+    #[serde(default)]
+    pub available: bool,
 }
 
 impl Notices {
@@ -80,6 +86,7 @@ impl Notices {
             items: Vec::new(),
             unseen: 0,
             total: 0,
+            available: false,
         }
     }
 }
@@ -136,6 +143,9 @@ fn list_from(jsonl: &Path, seen: &Path, limit: usize) -> Notices {
         items,
         unseen: total - seen,
         total,
+        // The file exists but is empty counts as installed: the scripts are
+        // there and simply have nothing to report yet.
+        available: jsonl.exists(),
     }
 }
 

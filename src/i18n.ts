@@ -121,6 +121,7 @@ const EN: Record<string, string> = {
   Valor: "Value",
   "Cada botón del header es una fila: qué": "Each header button is a row: what",
 
+  "Incluir el vigilante de acople": "Include the dock watcher",
   // MCP agnostico: el panel nombra las tres formas de ejecutar
   Ejecutable: "Executable",
   Directorio: "Directory",

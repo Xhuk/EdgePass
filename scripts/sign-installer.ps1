@@ -24,7 +24,7 @@
 
 param(
     [Parameter(Mandatory = $true)][string]$Thumbprint,
-    [string]$Installer = "src-tauri\target\x86_64-pc-windows-msvc\release\bundle\nsis\edgePass_0.4.1_x64-setup.exe",
+    [string]$Installer = "src-tauri\target\x86_64-pc-windows-msvc\release\bundle\nsis\edgePass_0.4.2_x64-setup.exe",
     [switch]$Verify
 )
 

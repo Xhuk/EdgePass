@@ -354,7 +354,14 @@ type Notice = {
 };
 
 /** The tail of that file plus the counter: `unseen` is what the pill shows. */
-type Notices = { items: Notice[]; unseen: number; total: number };
+type Notices = {
+  items: Notice[];
+  unseen: number;
+  total: number;
+  /** The `.jsonl` exists. False = the two writer scripts are not installed, so
+   *  this tab has nothing to say and its vocabulary is not ours to impose. */
+  available?: boolean;
+};
 
 /**
  * One MCP server as stored in `config.json` → `mcpServers[]`.
@@ -488,6 +495,16 @@ function parseMcpJson(text: string): McpServerSpec[] {
 }
 
 /** Everything needed to explain a bad install without a debugger. */
+function withoutDockNoise(tail: string): string {
+  const kept = tail
+    .split("\n")
+    .filter((line) => !/\bui:\s\d+ms\s+dock/.test(line))
+    .join("\n")
+    .trimEnd();
+  return kept.trim() === ""
+    ? "(sólo líneas del vigilante de acople; marcá la casilla para verlas)"
+    : kept;
+}
 type Diagnostics = {
   version: string;
   exe: string;
@@ -609,6 +626,9 @@ export default function App() {
   const [bootMsg, setBootMsg] = useState("Guardian…");
   const [selected, setSelected] = useState(0);
   const [diag, setDiag] = useState<Diagnostics | null>(null);
+  /** The dock watcher writes three lines every five seconds. In the viewer they
+   *  are hidden by default: they used to be 100% of what was on screen. */
+  const [showLogNoise, setShowLogNoise] = useState(false);
   /** The committee's notices, and how many of them the human has not looked at
    *  yet. Refilled by the same tick as the header, so the pill's counter keeps
    *  working while the widget is collapsed. */
@@ -2861,7 +2881,11 @@ export default function App() {
                       ["notices", tabLabels().notices],
                       ["diag", tabLabels().logs],
                     ] as [Panel, string][]
-                  ).map(([id, label]) => (
+                  )
+                    // Without the two writer scripts the panel has nothing to
+                    // show, so the menu does not offer it either.
+                    .filter(([id]) => id !== "notices" || notices?.available !== false)
+                    .map(([id, label]) => (
                     <button
                       key={id}
                       type="button"
@@ -3014,15 +3038,17 @@ export default function App() {
                   >
                     {tabLabels().mcp}
                   </button>
-                  <button
-                    type="button"
-                    className={panel === "notices" ? "active" : ""}
-                    onClick={() => void openNotices()}
-                    title={tabTitles().notices}
-                  >
-                    {tabLabels().notices}
-                    {!!notices?.unseen && <span className="tab-count">{notices.unseen}</span>}
-                  </button>
+                  {notices?.available !== false && (
+                    <button
+                      type="button"
+                      className={panel === "notices" ? "active" : ""}
+                      onClick={() => void openNotices()}
+                      title={tabTitles().notices}
+                    >
+                      {tabLabels().notices}
+                      {!!notices?.unseen && <span className="tab-count">{notices.unseen}</span>}
+                    </button>
+                  )}
                   <button
                     type="button"
                     className={panel === "diag" ? "active" : ""}
@@ -3280,7 +3306,7 @@ export default function App() {
                         </div>
                       </div>
                       <div className="meter-head-actions">
-                        <span className="badge">{batchRows.length} vars</span>
+                        <span className="badge">{batchRows.length} {batchRows.length === 1 ? "variable" : "variables"}</span>
                         <motion.button
                           type="button"
                           className={[
@@ -3531,7 +3557,7 @@ export default function App() {
                         </button>
                         <span>
                           {batchPage + 1}/{Math.ceil(batchRows.length / BATCH_VISIBLE_ROWS)} ·{" "}
-                          {batchRows.length} vars
+                          {batchRows.length} {batchRows.length === 1 ? "variable" : "variables"}
                         </span>
                         <button
                           type="button"
@@ -4594,7 +4620,9 @@ export default function App() {
                       </div>
                     </div>
 
-                    <div className="settings-row">
+                    {/* Pegado al pie: en una app que se usa en ráfagas, la acción
+                        primaria no puede quedar tres pantallas abajo. */}
+                    <div className="settings-row sticky-save">
                       <motion.button
                         type="button"
                         className="primary"
@@ -4743,7 +4771,16 @@ export default function App() {
                           </div>
                         </dl>
                         <p className="group-title">{t("Últimas líneas del log")}</p>
-                        <pre className="diag-log">{diag.logTail || "(vacío)"}</pre>
+                        <label className="check">
+                          <input
+                            type="checkbox"
+                            checked={showLogNoise}
+                            onChange={(e) => setShowLogNoise(e.target.checked)}
+                          />{t("Incluir el vigilante de acople")}</label>
+                        <pre className="diag-log">
+                          {(showLogNoise ? diag.logTail : withoutDockNoise(diag.logTail)) ||
+                            "(vacío)"}
+                        </pre>
                       </>
                     ) : (
                       <p className="hint">{t("Leyendo…")}</p>

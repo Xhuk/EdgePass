@@ -2670,3 +2670,15 @@ html.is-morphing .dock-tab {
   font-weight: 600;
   padding-left: 2px;
 }
+
+/* La accion primaria de Ajustes, pegada al pie del panel.
+   El formulario es largo y Guardar vivia al final: en una app que se usa en
+   rafagas de segundos, un CTA que exige scroll es un CTA que no existe. */
+.settings-row.sticky-save {
+  position: sticky;
+  bottom: 0;
+  padding-top: 8px;
+  padding-bottom: 4px;
+  background: linear-gradient(to top, var(--material-strong, rgba(20,20,22,0.96)) 70%, transparent);
+  z-index: 5;
+}
