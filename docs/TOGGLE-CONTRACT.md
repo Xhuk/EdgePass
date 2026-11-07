@@ -10,7 +10,7 @@ contributor can read the vocabulary at runtime and add LEDs without touching the
 frontend — and, for the built-in probes, without guessing an id.
 
 ```
-Ajustes → Toggles del header        ─┐
+Settings → Header toggles           ─┐
 config.json → "toggles": [ … ]      ─┼─ same list, three views of it
 {"op":"toggles","set":[ … ]}        ─┘
 ```
@@ -29,7 +29,7 @@ config.json → "toggles": [ … ]      ─┼─ same list, three views of it
 }
 ```
 
-Rules the backend enforces on every write (`toggles::validate`, shared by Ajustes
+Rules the backend enforces on every write (`toggles::validate`, shared by Settings
 and the pipe, so both take the same path):
 
 | Rule | Why |
@@ -223,10 +223,10 @@ of that contract, and the ids are already shaped like it.
 | fresh (no `config.json` yet) | `KV` only — OpenBao is a prerequisite, so the vault is the one light every install has something behind. Everything else is opt-in |
 | upgrading from a pre-`toggles` config | `KV`, `QR`, `GOV`, `GW` — the three the header hardcoded, with `GW` (the Q-ring process) moved to `QR` and handed its new job. The v3→v4 migration does it once, and only for the *stock* spec: a header edited by hand stays as it is |
 
-`GW`/`QR`/`GOV` are one `＋ Agregar un toggle` away in Ajustes (probes `gha.runner` /
+`GW`/`QR`/`GOV` are one `＋ Add toggle` away in Settings (probes `gha.runner` /
 `qring.process` / `qring.governance`); an install with no Q-ring pack and no Docker
 Desktop is not forced to carry three amber lights. `×` removes a row, `↑`/`↓` reorder, and
-everything applies on **Guardar**.
+everything applies on **Save**.
 
 `SYNC`/`AUTO` (probes `skills.sync` / `skills.watch`) are the same deal: opt-in rows.
 They stay out of the shipped defaults on purpose — they point at
