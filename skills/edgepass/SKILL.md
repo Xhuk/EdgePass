@@ -1,6 +1,6 @@
 ---
 name: edgepass
-description: Use edgePass, the local OpenBao secret widget, from an agent. Ask the human for a credential in the widget, search secrets by name, run a command with secrets in the child environment, request permission with a popup, or read vault health. Trigger on "usa edge pass", "dame la contraseña de", "corré esto con el secreto", "está abierto el vault".
+description: Use edgePass, the local OpenBao secret widget, from an agent. Trigger on any request to use edgePass in any language or spelling — "usa edge pass", "use edge pass", "use edgepass", "utilise edge pass", "verwende edge pass", "edge pass を使って", "使用 edge pass" — and on "dame la contraseña de", "do we have credentials for", "corré esto con el secreto", "run this with the secret", "está abierto el vault", "is the vault open". Ask the human for a credential in the widget, search secrets by name, run a command with secrets in the child environment, request permission with a popup, or read vault health.
 ---
 
 # edgePass — how an agent uses it
@@ -9,13 +9,31 @@ edgePass is a desktop widget that talks to a local OpenBao. The agent talks to t
 **widget**, not to OpenBao. The widget does the work and sees the values. The agent
 never does.
 
+## When this skill applies
+
+The phrase means **"go to the widget"**. There is no fixed spelling: any equivalent of
+"use edgePass" in any language counts, and so does a bare phrase with no object.
+
+| The human says | Do this |
+|---|---|
+| "usa edge pass" / "use edge pass", no object | `{"op":"status"}`; if ready, `meter` for the secret they last named, or ask which one |
+| "usa edge pass" + a name, site or path | `{"op":"meter","query":"<name>"}` and tell them where to look |
+| "usa edge pass y corré X" / "use edge pass and run X" | `run` with the secret by environment, never on the command line |
+| "usa edge pass" and the pipe does not answer | tell them to open the widget; retry once, do not launch it yourself |
+
+Translations, typos and variants are all the same authorization: `usaedgepass`,
+`edge pass por favor`, `usá edgepass`, `usar el widget`, `use the pass`. Do not ask a
+second time for the exact wording.
+
 ## Rule zero
 
 1. **Never print a secret value.** Not to check the length, not to "verify". If a
    value reaches the output, report it as an incident and rotate it.
 2. **Never ask the human to paste a secret into the chat.** The chat is the worst
    place. Use the widget.
-3. **When the human says "usa edge pass",** they authorized you. Do not ask again.
+3. **When the human says "usa edge pass", "use edge pass" or the same in any
+   language, they authorized you.** Do not ask again, and do not require the exact
+   phrase.
 4. **`export-env` does not exist.** It wrote values to disk and was removed. To use
    a secret, run it in a child process.
 5. **Do not invent paths.** Search first. The index knows the paths.
