@@ -1,0 +1,22 @@
+<svg fill="#ffffff" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512"><title>edgePass logo daylight</title>
+  
+  <defs>
+    <mask id="keyhole-cutout">
+      <rect x="-256" y="-256" width="512" height="512" fill="#ffffff"/>
+      <!-- Keyhole cutout shape in black (removes fill) -->
+      <path fill="#ffffff" d="M 0 -22 A 15 15 0 1 0 0 8 L 7 8 L 14 34 L -14 34 L -7 8 L 0 8 Z"/>
+    </mask>
+  </defs>
+  <g transform="translate(256, 256) scale(1.35)">
+    <!-- Outer Capsule Ring (Expanded filled path) -->
+    <path transform="rotate(-45)" fill="#ffffff" fill-rule="evenodd" d="M -78 -48 A 78 78 0 0 1 78 -48 L 78 48 A 78 78 0 0 1 -78 48 Z M -58 -48 L -58 48 A 58 58 0 0 0 58 48 L 58 -48 A 58 58 0 0 0 -58 -48 Z"/>
+
+    <!-- Inner Elements with True Keyhole Cutout Hole -->
+    <g mask="url(#keyhole-cutout)">
+      <!-- Inner Capsule Body -->
+      <path transform="rotate(-45)" fill="#ffffff" d="M -52 -48 A 52 52 0 0 1 52 -48 L 52 48 A 52 52 0 0 1 -52 48 Z"/>
+      <!-- Diagonal Slash Bar -->
+      <path transform="rotate(45)" fill="#ffffff" d="M -110 -15 L 110 -15 A 15 15 0 0 1 125 0 A 15 15 0 0 1 110 15 L -110 15 A 15 15 0 0 1 -125 0 A 15 15 0 0 1 -110 -15 Z"/>
+    </g>
+  </g>
+</svg>
