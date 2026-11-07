@@ -4,6 +4,28 @@ All notable changes to edgePass. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are
 `MAJOR.MINOR.PATCH` and a release is a `vX.Y.Z` tag in this repo.
 
+## 0.5.1 — 2026-11-07
+
+### Added
+
+- **First-run onboarding.** On a machine without a usable vault (unreachable,
+  uninitialized, no token, missing init file or sealed), the panel opens once with
+  what is missing and four actions: **Install OpenBao** (official guide),
+  **Retry**, **Start service** when the Windows service exists but is stopped, and
+  **Connect a vault** (Settings → Vault).
+- **`setup` in the status.** `get_status` and `{"op":"status"}` now carry
+  `needed`, a stable `code`, an English `message`, the ordered `steps`, and the
+  official `installUrl` / `releasesUrl` / `readmeUrl`. An agent can tell the human
+  exactly what to do instead of guessing.
+- `open_setup_link` command: opens one of the fixed setup URLs (id, not a URL).
+
+### Changed
+
+- README has a "No vault yet?" section that describes the same path.
+- An agent that downloads this build has the contract in
+  `skills/edgepass/SKILL.md`: read `setup`, tell the human, do not install or
+  invent a token, one retry after they say it is running.
+
 ## 0.5.0 — 2026-11-07
 
 ### Added

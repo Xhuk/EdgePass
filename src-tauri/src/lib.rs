@@ -126,6 +126,9 @@ pub struct StatusDto {
     pub auto_load_token: bool,
     pub init_path: String,
     pub seal: SealStatusDto,
+    /// Why the vault is (or is not) usable, with the next steps. Both the window
+    /// and an agent read this; `code` is the stable part.
+    pub setup: SetupHint,
     pub idle_secs: u64,
     pub service: ServiceStatusDto,
     /// The header LEDs, as data: the stored spec plus what its probe sees right
@@ -138,6 +141,161 @@ pub struct StatusDto {
     /// `catalog` is derived from this list, so the editor can render both from
     /// one snapshot.
     pub services: Vec<services::ServiceSpec>,
+}
+
+/// What a first-run install is missing, in a shape both a person and an agent
+/// can act on.
+///
+/// `code` is stable (an agent branches on it), `message`/`steps` are English and
+/// actionable, and the links are the official ones. The window localizes its own
+/// copy from `code`; it does not print `steps`.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetupHint {
+    pub needed: bool,
+    /// `vault_unreachable` | `vault_uninitialized` | `init_file_missing` |
+    /// `no_token` | `vault_sealed` | `ready`
+    pub code: String,
+    pub message: String,
+    pub steps: Vec<String>,
+    pub install_url: String,
+    pub releases_url: String,
+    pub readme_url: String,
+}
+
+const OPENBAO_INSTALL_URL: &str = "https://openbao.org/docs/install/";
+const OPENBAO_RELEASES_URL: &str = "https://github.com/openbao/openbao/releases";
+const SETUP_README_URL: &str = "https://github.com/Xhuk/EdgePass#readme";
+
+/// Why the vault is not ready, and the next four steps. Pure and cheap: called
+/// from `get_status` and from the pipe's `status`, so an agent and the window
+/// see the same answer.
+pub(crate) fn setup_hint(cfg: &AppConfig, seal: &SealStatusDto, has_token: bool) -> SetupHint {
+    let addr = {
+        let raw = cfg.bao_addr.trim();
+        if raw.is_empty() {
+            "the configured address"
+        } else {
+            raw
+        }
+    };
+    let init_path = cfg.init_path.trim();
+    let build = |code: &str, message: String, steps: Vec<String>| SetupHint {
+        needed: true,
+        code: code.into(),
+        message,
+        steps,
+        install_url: OPENBAO_INSTALL_URL.into(),
+        releases_url: OPENBAO_RELEASES_URL.into(),
+        readme_url: SETUP_README_URL.into(),
+    };
+    let steps = |items: &[&str]| items.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+
+    if !seal.reachable {
+        return build(
+            "vault_unreachable",
+            format!("OpenBao is not reachable at {addr}."),
+            steps(&[
+                "Install OpenBao 2.x from the install guide or the releases page, and run it as a local service.",
+                "Listen on loopback; 127.0.0.1:8200 is the address edgePass expects by default.",
+                "Initialize it once (bao operator init) and keep the init file outside every repository.",
+                "In edgePass: Settings > Vault, confirm the address, then paste a token or point initPath at the init file.",
+            ]),
+        );
+    }
+    if !seal.initialized {
+        return build(
+            "vault_uninitialized",
+            "OpenBao answers but has not been initialized.".into(),
+            steps(&[
+                "Run bao operator init once and store the init file outside every repository.",
+                "Put that path in Settings > Vault (initPath), or paste a token directly.",
+                "Unseal the vault if it is still sealed.",
+            ]),
+        );
+    }
+    if !init_path.is_empty() && !std::path::Path::new(init_path).exists() {
+        return build(
+            "init_file_missing",
+            format!("The configured init file does not exist: {init_path}"),
+            steps(&[
+                "Move the init file to that path, or update initPath in Settings > Vault.",
+                "The init file holds the unseal keys and the root token; keep it out of every repository.",
+            ]),
+        );
+    }
+    if !has_token && init_path.is_empty() {
+        return build(
+            "no_token",
+            "The vault answers but edgePass has no token.".into(),
+            steps(&[
+                "In Settings > Vault, paste a token with read/list on the KV mount, or set initPath so edgePass can load it.",
+                "Save. The index syncs automatically after the token is stored.",
+            ]),
+        );
+    }
+    if seal.sealed && (init_path.is_empty() || !cfg.auto_unseal) {
+        return build(
+            "vault_sealed",
+            "The vault is sealed and edgePass cannot open it.".into(),
+            steps(&[
+                "Unseal it with bao operator unseal, or enable auto-unseal with an init file in Settings > Vault.",
+                "For a sealed vault, the unseal keys come from the init file; the token alone is not enough.",
+            ]),
+        );
+    }
+    SetupHint {
+        needed: false,
+        code: "ready".into(),
+        message: "OpenBao is reachable and ready.".into(),
+        steps: Vec::new(),
+        install_url: OPENBAO_INSTALL_URL.into(),
+        releases_url: OPENBAO_RELEASES_URL.into(),
+        readme_url: SETUP_README_URL.into(),
+    }
+}
+
+/// Opens one of the fixed setup links in the browser.
+///
+/// The caller names an id, not a URL: the destination is a constant here, so the
+/// pipe cannot turn this into "open anything".
+#[tauri::command]
+fn open_setup_link(id: String) -> Result<(), String> {
+    let url = match id.as_str() {
+        "openbao_install" => OPENBAO_INSTALL_URL,
+        "openbao_releases" => OPENBAO_RELEASES_URL,
+        "readme" => SETUP_README_URL,
+        other => return Err(format!("link desconocido: {other}")),
+    };
+    open_external(url)
+}
+
+fn open_external(url: &str) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        std::process::Command::new("cmd")
+            .args(["/C", "start", "", url])
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .map_err(|e| format!("no pude abrir el navegador: {e}"))?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(url)
+            .spawn()
+            .map_err(|e| format!("no pude abrir el navegador: {e}"))?;
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(url)
+            .spawn()
+            .map_err(|e| format!("no pude abrir el navegador: {e}"))?;
+    }
+    Ok(())
 }
 
 #[derive(Debug, Serialize)]
@@ -227,12 +385,15 @@ fn status_snapshot(state: &AppState, cfg: &AppConfig, seal: SealStatusDto) -> St
     // `views` probes the Q-ring only when a LED asks for it (the call spawns
     // `tasklist`, and this snapshot runs on a 5 s poll).
     let leds = toggles::views(cfg, &seal, !state.grants.list_public().is_empty());
+    let has_token = has_token();
+    let setup = setup_hint(cfg, &seal, has_token);
 
     StatusDto {
         bao_addr: cfg.bao_addr.clone(),
         mount: cfg.mount.clone(),
         namespaces: cfg.namespaces.clone(),
-        has_token: has_token(),
+        has_token,
+        setup,
         indexed,
         last_sync,
         auto_unseal: cfg.auto_unseal,
@@ -1628,6 +1789,7 @@ pub fn run() {
             bootstrap,
             save_settings,
             validate_services,
+            open_setup_link,
             clear_token,
             sync_index,
             search,
@@ -1665,6 +1827,68 @@ pub fn run() {
 
     if let Err(e) = result {
         crate::log_error!("error fatal al correr edgePass: {e}");
+    }
+}
+
+#[cfg(test)]
+mod setup_tests {
+    use super::*;
+
+    fn seal(reachable: bool, initialized: bool, sealed: bool) -> SealStatusDto {
+        SealStatusDto {
+            reachable,
+            health_code: if sealed { 503 } else { 200 },
+            initialized,
+            sealed,
+            progress: 0,
+            threshold: 3,
+            version: None,
+            message: "sonda".into(),
+        }
+    }
+
+    #[test]
+    fn a_fresh_install_points_at_the_install_guide() {
+        let hint = setup_hint(&AppConfig::default(), &seal(false, false, true), false);
+        assert!(hint.needed);
+        assert_eq!(hint.code, "vault_unreachable");
+        assert!(hint.steps.len() >= 3);
+        assert!(hint.install_url.contains("openbao.org"));
+        assert!(hint.releases_url.contains("openbao/openbao"));
+    }
+
+    #[test]
+    fn a_ready_vault_needs_nothing() {
+        let hint = setup_hint(&AppConfig::default(), &seal(true, true, false), true);
+        assert!(!hint.needed);
+        assert_eq!(hint.code, "ready");
+        assert!(hint.steps.is_empty());
+    }
+
+    #[test]
+    fn an_uninitialized_vault_is_named() {
+        let hint = setup_hint(&AppConfig::default(), &seal(true, false, true), false);
+        assert_eq!(hint.code, "vault_uninitialized");
+    }
+
+    #[test]
+    fn a_missing_token_is_named() {
+        let hint = setup_hint(&AppConfig::default(), &seal(true, true, false), false);
+        assert_eq!(hint.code, "no_token");
+    }
+
+    #[test]
+    fn a_missing_init_file_is_named_even_with_a_token() {
+        let mut cfg = AppConfig::default();
+        cfg.init_path = r"C:\no\existe\init.json".into();
+        let hint = setup_hint(&cfg, &seal(true, true, false), true);
+        assert_eq!(hint.code, "init_file_missing");
+    }
+
+    #[test]
+    fn a_sealed_vault_without_an_init_file_is_named() {
+        let hint = setup_hint(&AppConfig::default(), &seal(true, true, true), true);
+        assert_eq!(hint.code, "vault_sealed");
     }
 }
 

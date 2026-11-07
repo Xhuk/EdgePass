@@ -229,6 +229,17 @@ type StatusDto = {
   autoLoadToken: boolean;
   initPath: string;
   seal: SealStatus;
+  /** Why the vault is (or is not) usable, with the next steps. Both the window
+   *  and an agent read this; `code` is the stable part. */
+  setup: {
+    needed: boolean;
+    code: string;
+    message: string;
+    steps: string[];
+    installUrl: string;
+    releasesUrl: string;
+    readmeUrl: string;
+  };
   idleSecs: number;
   service: {
     name: string;
@@ -653,6 +664,32 @@ function noticeWhen(at: string): string {
   return `${pad(when.getDate())}/${pad(when.getMonth() + 1)} ${pad(when.getHours())}:${pad(when.getMinutes())}`;
 }
 
+/** Localized copy for the first-run card, keyed by the stable `setup.code`. */
+function setupText(code: string): string {
+  switch (code) {
+    case "vault_uninitialized":
+      return t(
+        "OpenBao responde pero no está inicializado: corré bao operator init una vez y guardá el init file.",
+      );
+    case "no_token":
+      return t(
+        "El vault responde, pero no hay token cargado: pegá uno manual en Ajustes → Vault o define el Init JSON para que el widget lo lea solo.",
+      );
+    case "init_file_missing":
+      return t(
+        "El init file configurado no existe: revisá la ruta en Ajustes → Vault o mové el archivo.",
+      );
+    case "vault_sealed":
+      return t(
+        "El vault está sellado y no hay init file para abrirlo: unseal con las keys o configurá initPath en Ajustes → Vault.",
+      );
+    default:
+      return t(
+        "edgePass no es el vault: es el helper. Necesita un OpenBao local corriendo en loopback y un token: dirección, mount y namespace se definen en Ajustes → Vault.",
+      );
+  }
+}
+
 export default function App() {
   const [expanded, setExpanded] = useState(false);
   const [dock, setDock] = useState<DockEdge | null>(null);
@@ -776,6 +813,8 @@ export default function App() {
   const readyRef = useRef(false);
   const expandedRef = useRef(false);
   const ledsCountRef = useRef(0);
+  /** Whether this session already auto-opened the first-run onboarding card. */
+  const onboardShown = useRef(false);
   /** The status call in flight, if any (see `refreshStatus`). */
   const statusInFlight = useRef<Promise<StatusDto> | null>(null);
   /** Debounce for the live `services[]` validation. */
@@ -844,6 +883,31 @@ export default function App() {
       alive = false;
     };
   }, [ledsCount, expanded, dock, ready, status]);
+
+  /**
+   * First run without a vault: open the panel once, so a download does not end
+   * in a silent amber pill. The localStorage flag makes it once per install;
+   * a vault that goes down later only gets the onboarding card when the person
+   * opens the panel, not a surprise expansion.
+   */
+  useEffect(() => {
+    if (!ready || !status?.setup?.needed || onboardShown.current) return;
+    let seen = false;
+    try {
+      seen = localStorage.getItem("edgePass.onboarded") === "1";
+    } catch {
+      /* no storage: open once per session */
+    }
+    if (seen) return;
+    onboardShown.current = true;
+    try {
+      localStorage.setItem("edgePass.onboarded", "1");
+    } catch {
+      /* no storage */
+    }
+    if (!expandedRef.current) void expandPanel();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, status?.setup?.needed]);
   useEffect(() => {
     grantRef.current = grant;
   }, [grant]);
@@ -3491,36 +3555,59 @@ export default function App() {
                             ))}
                           </AnimatePresence>
                         </ul>
-                        {hits.length === 0 && !seal?.reachable && (
+                        {hits.length === 0 && status?.setup?.needed && (
                           <div className="onboard" role="note">
-                            <p>
-                              {t("edgePass no es el vault: es el helper. Necesita un OpenBao local corriendo en loopback y un token: dirección, mount y namespace se definen en Ajustes → Vault.")}
-                            </p>
-                            <motion.button
-                              className="primary"
-                              type="button"
-                              whileTap={tap}
-                              disabled={busy}
-                              onClick={openSettings}
-                            >
-                              {t("Conectar un vault")}
-                            </motion.button>
-                          </div>
-                        )}
-                        {hits.length === 0 && seal?.reachable && status !== null && !status.hasToken && (
-                          <div className="onboard" role="note">
-                            <p>
-                              {t("El vault responde, pero no hay token cargado: pegá uno manual en Ajustes → Vault o define el Init JSON para que el widget lo lea solo.")}
-                            </p>
-                            <motion.button
-                              className="primary"
-                              type="button"
-                              whileTap={tap}
-                              disabled={busy}
-                              onClick={openSettings}
-                            >
-                              {t("Abrir Ajustes")}
-                            </motion.button>
+                            <p>{setupText(status.setup.code)}</p>
+                            <div className="onboard-actions">
+                              <motion.button
+                                className="primary"
+                                type="button"
+                                whileTap={tap}
+                                disabled={busy}
+                                onClick={openSettings}
+                              >
+                                {status.setup.code === "no_token"
+                                  ? t("Abrir Ajustes")
+                                  : t("Conectar un vault")}
+                              </motion.button>
+                              {(status.setup.code === "vault_unreachable" ||
+                                status.setup.code === "vault_uninitialized") && (
+                                <button
+                                  type="button"
+                                  className="ghost"
+                                  onClick={() =>
+                                    void invoke("open_setup_link", { id: "openbao_install" })
+                                  }
+                                >
+                                  {t("Instalar OpenBao")}
+                                </button>
+                              )}
+                              {status.service.installed && !status.service.running && (
+                                <button
+                                  type="button"
+                                  className="ghost"
+                                  disabled={busyStartingOpenBao}
+                                  onClick={() => void onOpenBaoStart()}
+                                >
+                                  {t("Arrancar servicio")}
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                className="ghost"
+                                disabled={busy}
+                                onClick={() => void bootstrap()}
+                              >
+                                {t("Reintentar")}
+                              </button>
+                            </div>
+                            {status.setup.code === "vault_unreachable" && (
+                              <p className="hint">
+                                {t("Dirección configurada:")}{" "}
+                                <code>{status.baoAddr}</code> ·{" "}
+                                {t("OpenBao tiene que correr en loopback (127.0.0.1).")}
+                              </p>
+                            )}
                           </div>
                         )}
                       </>

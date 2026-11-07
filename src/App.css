@@ -1747,6 +1747,24 @@ html.is-morphing .dock-tab {
   margin-top: 12px;
 }
 
+.onboard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.onboard-actions .primary,
+.onboard-actions .ghost {
+  margin-top: 0;
+}
+
+.onboard .hint {
+  margin-top: 10px;
+  text-align: center;
+}
+
 /* =============================================================================
    Forms
    ========================================================================== */

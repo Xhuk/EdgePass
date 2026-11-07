@@ -444,6 +444,8 @@ async fn dispatch(req: Value, state: Arc<AppState>, app: &AppHandle) -> Value {
         "status" => match load_config() {
             Ok(cfg) => {
                 let seal = seal_status(&cfg).await;
+                let has_token = crate::config::has_token();
+                let setup = crate::setup_hint(&cfg, &seal, has_token);
                 let hold_until = state.hold_until.load(Ordering::Relaxed);
                 let last = state.last_activity.load(Ordering::Relaxed);
                 json!({
@@ -451,7 +453,12 @@ async fn dispatch(req: Value, state: Arc<AppState>, app: &AppHandle) -> Value {
                     "sealed": seal.sealed,
                     "reachable": seal.reachable,
                     "initialized": seal.initialized,
+                    "hasToken": has_token,
                     "message": seal.message,
+                    // The same hint the window gets: why the vault is not ready
+                    // and the next steps, so an agent can tell the human instead
+                    // of guessing or retrying in a loop.
+                    "setup": setup,
                     "autoSealIdleSecs": cfg.auto_seal_idle_secs,
                     "idleSecs": if last == 0 { 0 } else { now_secs().saturating_sub(last) },
                     "holdSecsLeft": hold_until.saturating_sub(now_secs()),

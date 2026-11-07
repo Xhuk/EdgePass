@@ -25,7 +25,7 @@ Skills send JSON commands to edgePass over a named pipe:
 |-----------|-------------|------------|
 | `ping` | Checks that edgePass is alive | — |
 | `focus` | Brings the pill to the front (does not expand) | — |
-| `status` | Vault state + hold | — |
+| `status` | Vault state + hold + `setup` (why it is not ready and the next steps) | — |
 | `search` | Searches the local index: **names only** (namespace, path, key), without opening the vault | `query?`, `limit?` (default 50, max 200) |
 | `meter` | **Opens the Batch tab (`meter`) with the secret's data**: resolves a path (or a `query` against the index) and the widget reads its fields and shows them for copying (eye per row · ⧉ copy all). The caller **never sees values** | `query?` **or** `path` (+ `namespace?`, `title?`) |
 | `unseal` / `seal` | Open / close the vault now | — |
@@ -202,6 +202,28 @@ The vault state appears in the status chip and affects behaviour:
 | `sealed` | 1 | Vault sealed, secrets protected |
 | `warn` | 2 | Vault initialised but with warnings |
 | `down` | 3 | OpenBao offline or unreachable |
+
+### First run: `setup`
+
+`{"op":"status"}` (and the window's `get_status`) returns:
+
+```json
+"setup": {
+  "needed": true,
+  "code": "vault_unreachable",
+  "message": "OpenBao is not reachable at http://127.0.0.1:8200.",
+  "steps": ["Install OpenBao 2.x ...", "..."],
+  "installUrl": "https://openbao.org/docs/install/",
+  "releasesUrl": "https://github.com/openbao/openbao/releases",
+  "readmeUrl": "https://github.com/Xhuk/EdgePass#readme"
+}
+```
+
+`code` is stable: `vault_unreachable`, `vault_uninitialized`, `init_file_missing`,
+`no_token`, `vault_sealed`, `ready`. If `needed`, tell the human what is missing
+and point at `installUrl` plus **Settings → Vault**; do not install OpenBao,
+invent a token or retry in a loop. The window opens the same card once on first
+run.
 
 ## Automatic behaviour
 
@@ -542,6 +564,15 @@ type StatusDto = {
   autoLoadToken: boolean;
   initPath: string;
   seal: SealStatus;
+  setup: {
+    needed: boolean;
+    code: string;
+    message: string;
+    steps: string[];
+    installUrl: string;
+    releasesUrl: string;
+    readmeUrl: string;
+  };
   idleSecs: number;
   service: {
     name: string;

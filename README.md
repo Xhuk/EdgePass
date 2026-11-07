@@ -40,6 +40,20 @@ policies and short-lived credentials. See [docs/PREREQUISITES.md](docs/PREREQUIS
 
 OpenBao is not optional. edgePass is useless without a vault to talk to.
 
+## No vault yet?
+
+If you install edgePass before OpenBao, it still starts: the pill shows one amber
+`KV` LED and, on the first run, the panel opens once with a card that says what is
+missing. From there:
+
+- **Install OpenBao** opens the official install guide.
+- **Retry** re-checks the vault after you start it.
+- **Connect a vault** opens Settings → Vault for the address and the token.
+
+edgePass does not install OpenBao, does not start a service that is not there, and
+does not invent a token. If the Windows service `OpenBao` exists but is stopped, it
+offers to start it. An agent sees the same answer in `{"op":"status"}` → `setup`.
+
 ## Install
 
 1. Install and start OpenBao. Follow [docs/PREREQUISITES.md](docs/PREREQUISITES.md).
@@ -53,8 +67,8 @@ The installer is per-user. It does not need administrator rights.
 
 ## First run
 
-The app starts collapsed. A click on the shield opens the panel. The header shows
-LEDs for the vault, the skills library, the CI runner and the MCP servers.
+With no vault configured, the panel opens once with the setup card described
+above; after that it starts collapsed. A click on the shield opens the panel.
 
 Agents drive the app through a named pipe, one JSON object per line. The full
 contract lives in [skills/edgepass/SKILL.md](skills/edgepass/SKILL.md). That file is
@@ -75,7 +89,7 @@ This project was developed against **Kiri** as the local container engine and
 
 ## Status
 
-`0.2.0`. Early. Not audited. Interfaces can change between minor versions.
+`0.5.1`. Early. Not audited. Interfaces can change between minor versions.
 
 ## License
 

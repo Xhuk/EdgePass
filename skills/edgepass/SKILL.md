@@ -96,6 +96,39 @@ fires one. A service the binary does not know about is `services[]` data:
 `{"op":"services","set":[…]}` publishes `svc.<id>`, and a `toggles` row can watch
 it. The full interview and the JSON shapes are in `skills/edgepass-led`.
 
+## First run without OpenBao
+
+`{"op":"status"}` carries `setup`. Read it before trying anything else:
+
+```json
+{"ok":true, "...": "...",
+ "setup":{
+   "needed":true,
+   "code":"vault_unreachable",
+   "message":"OpenBao is not reachable at http://127.0.0.1:8200.",
+   "steps":["Install OpenBao 2.x ...", "..."],
+   "installUrl":"https://openbao.org/docs/install/",
+   "releasesUrl":"https://github.com/openbao/openbao/releases",
+   "readmeUrl":"https://github.com/Xhuk/EdgePass#readme"
+ }}
+```
+
+Codes: `vault_unreachable`, `vault_uninitialized`, `init_file_missing`,
+`no_token`, `vault_sealed`, `ready`.
+
+When `needed` is true:
+
+1. Tell the human what is missing in one sentence (`message`), not a wall of text.
+2. Point at `installUrl` to install OpenBao and at **Settings → Vault** for the
+   address and token. The widget opens the same card by itself on first run.
+3. Do **not** install OpenBao, run `bao operator init`, start a service that is
+   not there, or invent a token. Do not retry in a loop: one retry after the human
+   says it is running.
+4. Never ask for the token in the chat. It goes in the widget, or `initPath` points
+   at the init file.
+
+`needed:false` means the vault is reachable and has a token; continue normally.
+
 ## If the widget does not answer
 
 `Connect` failing means it is not running. Do not launch it with `Start-Process`:

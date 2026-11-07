@@ -129,6 +129,17 @@ const EN: Record<string, string> = {
   "se aplican al guardar": "applies on save",
   "solo mirar": "read only",
   "Solo mira: no tiene acción.": "Read-only: no action.",
+  "Instalar OpenBao": "Install OpenBao",
+  "Arrancar servicio": "Start service",
+  Reintentar: "Retry",
+  "Dirección configurada:": "Configured address:",
+  "OpenBao tiene que correr en loopback (127.0.0.1).": "OpenBao must run on loopback (127.0.0.1).",
+  "OpenBao responde pero no está inicializado: corré bao operator init una vez y guardá el init file.":
+    "OpenBao answers but is not initialized: run `bao operator init` once and keep the init file.",
+  "El init file configurado no existe: revisá la ruta en Ajustes → Vault o mové el archivo.":
+    "The configured init file does not exist: check the path in Settings → Vault or move the file.",
+  "El vault está sellado y no hay init file para abrirlo: unseal con las keys o configurá initPath en Ajustes → Vault.":
+    "The vault is sealed and there is no init file to open it: unseal with the keys or set initPath in Settings → Vault.",
   "El header muestra hasta": "The header shows up to",
   "LEDs; un servicio sin LED no se consulta.": "LEDs; a service without a LED is not probed.",
   "Meter · nuevo secreto": "Batch · new secret",
