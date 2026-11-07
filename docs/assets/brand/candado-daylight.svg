@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="ep-title">
+  <title id="ep-title">edgePass</title>
+  <defs>
+    <mask id="keyhole" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+      <rect width="512" height="512" fill="#fff"/>
+      <g transform="translate(256 256)" fill="#000">
+        <circle cy="-7" r="16"/>
+        <path d="M-7 -4 L7 -4 L14 32 L-14 32 Z"/>
+      </g>
+    </mask>
+  </defs>
+  <g mask="url(#keyhole)" transform="translate(256 256)">
+    <g transform="rotate(-45)">
+      <rect x="-76" y="-124" width="152" height="248" rx="76" fill="none"
+            stroke="#0284C7" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="-52" y="-100" width="104" height="200" rx="52" fill="#047857"/>
+    </g>
+    <g transform="rotate(45)">
+      <rect x="-124" y="-15" width="248" height="30" rx="15" fill="#065F46"/>
+    </g>
+  </g>
+</svg>
