@@ -103,17 +103,17 @@ Four answers become one object. The comments are for reading, not for the file.
 
 ```jsonc
 {
-  "id": "mi-api",                     // stable key, no spaces, unique
+  "id": "my-api",                     // stable key, no spaces, unique
   "label": "API",                     // what the LED says: 1-4 chars, uppercased
-  "name": "mi-api en el 8788",        // the tooltip's first line
+  "name": "my-api on 8788",        // the tooltip's first line
   "probe": {
     "kind": "process",                // "process" | "cmd"
-    "image": "mi-api.exe",            // process: the image to look for
-    "match": "mi-api"                 // optional: argv substring, to tell interpreters apart
+    "image": "my-api.exe",            // process: the image to look for
+    "match": "my-api"                 // optional: argv substring, to tell interpreters apart
   },
   "actions": {
-    "on":  { "cmd": ["C:\\tools\\mi-api.exe", "serve"] },
-    "off": { "cmd": ["C:\\tools\\mi-api.exe", "stop"] }
+    "on":  { "cmd": ["C:\\tools\\my-api.exe", "serve"] },
+    "off": { "cmd": ["C:\\tools\\my-api.exe", "stop"] }
   }
 }
 ```
@@ -156,9 +156,9 @@ purpose: two LEDs can watch the same service with different labels.
 {
   "id": "api",                 // unique; what a click sends back
   "label": "API",              // 1-4 chars, uppercased
-  "probe": "svc.mi-api",       // a catalog probe, or svc.<id> / mcp.<id>
-  "on":  "svc.mi-api.on",      // action when the probe says off
-  "off": "svc.mi-api.off",     // action when the probe says on
+  "probe": "svc.my-api",       // a catalog probe, or svc.<id> / mcp.<id>
+  "on":  "svc.my-api.on",      // action when the probe says off
+  "off": "svc.my-api.off",     // action when the probe says on
   "alt": null                  // optional: Ctrl / right click
 }
 ```
@@ -193,7 +193,7 @@ if ($specs.Count -ge $r.catalog.maxToggles) {
 }
 
 $specs += [pscustomobject]@{
-  id="api"; label="API"; probe="svc.mi-api"; on="svc.mi-api.on"; off="svc.mi-api.off"; alt=$null
+  id="api"; label="API"; probe="svc.my-api"; on="svc.my-api.on"; off="svc.my-api.off"; alt=$null
 }
 
 $json = @{ op="toggles"; set=$specs } | ConvertTo-Json -Depth 8 -Compress
@@ -208,18 +208,18 @@ $r = Invoke-EdgePass '{"op":"services"}' | ConvertFrom-Json
 if (-not $r.ok) { throw $r.error }
 
 $list = @($r.services) + [pscustomobject]@{
-  id      = "mi-api"
+  id      = "my-api"
   label   = "API"
-  name    = "mi-api en el 8788"
-  probe   = @{ kind = "process"; image = "mi-api.exe" }
+  name    = "my-api on 8788"
+  probe   = @{ kind = "process"; image = "my-api.exe" }
   actions = @{
-    on  = @{ cmd = @("C:\tools\mi-api.exe", "serve") }
-    off = @{ cmd = @("C:\tools\mi-api.exe", "stop") }
+    on  = @{ cmd = @("C:\tools\my-api.exe", "serve") }
+    off = @{ cmd = @("C:\tools\my-api.exe", "stop") }
   }
 }
 Invoke-EdgePass (@{ op = "services"; set = $list } | ConvertTo-Json -Depth 8 -Compress)
 
-# 2. The LED that watches it — Step 5, with probe "svc.mi-api".
+# 2. The LED that watches it — Step 5, with probe "svc.my-api".
 ```
 
 The reply to `{"op":"services"}` carries `services`, the `svc.*` half of the

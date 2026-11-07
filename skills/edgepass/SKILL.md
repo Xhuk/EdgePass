@@ -18,7 +18,7 @@ The phrase means **"go to the widget"**. There is no fixed spelling: any equival
 |---|---|
 | "usa edge pass" / "use edge pass", no object | `{"op":"status"}`; if ready, `meter` for the secret they last named, or ask which one |
 | "usa edge pass" + a name, site or path | `{"op":"meter","query":"<name>"}` and tell them where to look |
-| "usa edge pass y corré X" / "use edge pass and run X" | `run` with the secret by environment, never on the command line |
+| "use edge pass and run X" | `run` with the secret by environment, never on the command line |
 | "usa edge pass" and the pipe does not answer | tell them to open the widget; retry once, do not launch it yourself |
 
 Translations, typos and variants are all the same authorization: `usaedgepass`,
