@@ -3,6 +3,8 @@
 A desktop widget that administers a local **OpenBao** vault and hands secrets to
 processes without ever printing them.
 
+**[edgePass site](https://xhuk.github.io/EdgePass/)** — install in four steps, what it does and what it does not do.
+
 edgePass is a **console**, not a server. It does not serve secrets to your containers.
 OpenBao does that. edgePass lets a human or an agent read, write, copy and inject
 secrets from a vault that runs on the same machine.
