@@ -1,11 +1,9 @@
 /**
- * The app mark: a rounded-square tile on Apple's icon grid with a keyhole in a
- * shield.
+ * The app mark: the edgePass candado — a ring and a body crossed by the edge,
+ * with the keyhole cut out so the tile behind it shows through.
  *
- * Two craft fixes over the old one: the baked-in "EDGE" wordmark is gone (at
- * 22px it was an illegible smudge, and the header already says edgePass next
- * to it), and the tile now carries a real specular highlight instead of a flat
- * two-stop gradient.
+ * Same drawing as `docs/assets/brand/candado.svg`: no filter, no painted
+ * keyhole, no live text, so it stays crisp at 16 px and on any background.
  */
 export function LogoMark({
   className = "",
@@ -16,31 +14,35 @@ export function LogoMark({
 }) {
   return (
     <span className={`logo-mark ${className}`.trim()} style={{ width: size, height: size }} aria-hidden="true">
-      <svg viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <svg viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
         <defs>
-          <linearGradient id="ep-tile" x1="5" y1="1" x2="23" y2="27" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#66cbbc" />
-            <stop offset="100%" stopColor="#1d665f" />
-          </linearGradient>
-          <linearGradient id="ep-gloss" x1="14" y1="1" x2="14" y2="15" gradientUnits="userSpaceOnUse">
-            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.3" />
-            <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
-          </linearGradient>
+          <mask id="ep-keyhole" maskUnits="userSpaceOnUse" x="0" y="0" width="512" height="512">
+            <rect width="512" height="512" fill="#fff" />
+            <g transform="translate(256 256)" fill="#000">
+              <circle cy="-7" r="16" />
+              <path d="M-7 -4 L7 -4 L14 32 L-14 32 Z" />
+            </g>
+          </mask>
         </defs>
-        <rect x="1" y="1" width="26" height="26" rx="8" fill="url(#ep-tile)" />
-        <rect x="1" y="1" width="26" height="26" rx="8" fill="url(#ep-gloss)" />
-        <path
-          d="M14 5.7l6.1 3.3v6c0 3.6-2.4 6.3-6.1 7.3-3.7-1-6.1-3.7-6.1-7.3V9l6.1-3.3z"
-          fill="rgba(5,32,28,0.26)"
-        />
-        <path
-          d="M14 5.7l6.1 3.3v6c0 3.6-2.4 6.3-6.1 7.3-3.7-1-6.1-3.7-6.1-7.3V9l6.1-3.3z"
-          stroke="rgba(255,255,255,0.86)"
-          strokeWidth="1.35"
-          strokeLinejoin="round"
-        />
-        <circle cx="14" cy="13.3" r="1.85" fill="#f7fffd" />
-        <path d="M13.25 15h1.5l0.45 3.05h-2.4z" fill="#f7fffd" />
+        <g mask="url(#ep-keyhole)" transform="translate(256 256)">
+          <g transform="rotate(-45)">
+            <rect
+              x="-76"
+              y="-124"
+              width="152"
+              height="248"
+              rx="76"
+              stroke="#00E5FF"
+              strokeWidth="20"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <rect x="-52" y="-100" width="104" height="200" rx="52" fill="#79FBBD" />
+          </g>
+          <g transform="rotate(45)">
+            <rect x="-124" y="-15" width="248" height="30" rx="15" fill="#79FBBD" />
+          </g>
+        </g>
       </svg>
     </span>
   );
