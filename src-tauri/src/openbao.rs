@@ -92,7 +92,7 @@ fn version_from_mounts(body: &Value, mount: &str) -> MountLookup {
     MountLookup::Found(if v2 { KvVersion::V2 } else { KvVersion::V1 })
 }
 
-/// (addr, mount, namespace) → version, so changing any of them in Ajustes
+/// (addr, mount, namespace) → version, so changing any of them in Settings
 /// re-resolves instead of reusing an answer about a different engine.
 type VersionKey = (String, String, String);
 
@@ -137,7 +137,7 @@ async fn kv_version(
         namespace
     };
     crate::log_info!(
-        "kv: namespace {label} tiene mount '{}' en KV {}",
+        "kv: namespace {label} has mount '{}' on KV {}",
         cfg.mount,
         version.label()
     );
@@ -542,7 +542,7 @@ async fn post_kv(
         )));
     }
     Err(BaoError::Msg(format!(
-        "write failed: el nodo de OpenBao no llegó a activo ({last})"
+        "write failed: the OpenBao node never became active ({last})"
     )))
 }
 
@@ -612,12 +612,12 @@ pub async fn delete_secret_key(
     let rel = path.trim_matches('/');
     let key = key.trim();
     if rel.is_empty() || key.is_empty() {
-        return Err(BaoError::Msg("path y key son requeridos".into()));
+        return Err(BaoError::Msg("path and key are required".into()));
     }
 
     let mut map = read_secret_map(cfg, token, namespace, rel).await?;
     if map.remove(key).is_none() {
-        return Err(BaoError::Msg(format!("key '{key}' no existe en {rel}")));
+        return Err(BaoError::Msg(format!("key '{key}' does not exist in {rel}")));
     }
 
     if map.is_empty() {
@@ -715,7 +715,7 @@ async fn discover_namespaces_under(
         match Box::pin(discover_namespaces_under(http, cfg, token, &full)).await {
             Ok(nested) => out.extend(nested),
             Err(e) => {
-                crate::log_warn!("sync: no pude listar hijos de namespace {full}: {e}");
+                crate::log_warn!("sync: could not list child namespaces of {full}: {e}");
             }
         }
     }
@@ -753,7 +753,7 @@ pub(crate) async fn resolve_scan_namespaces(
         match discover_namespaces_under(http, cfg, token, "").await {
             Ok(discovered) => {
                 crate::log_info!(
-                    "sync: `.` expande a root + {} namespace(s)",
+                    "sync: `.` expands to root + {} namespace(s)",
                     discovered.len()
                 );
                 let mut sorted = discovered;
@@ -766,7 +766,7 @@ pub(crate) async fn resolve_scan_namespaces(
             }
             Err(e) => {
                 crate::log_warn!(
-                    "sync: no pude descubrir namespaces hijos ({e}); solo indexo root"
+                    "sync: could not discover child namespaces ({e}); indexing root only"
                 );
             }
         }
@@ -824,7 +824,7 @@ async fn scan_namespace(
                     }
                     Err(e) => {
                         let label = if ns.is_empty() { "root" } else { ns };
-                        crate::log_warn!("sync: salto {label}/{path}: {e}");
+                        crate::log_warn!("sync: skipping {label}/{path}: {e}");
                     }
                 }
             }
@@ -850,7 +850,7 @@ pub async fn scan_index(cfg: &AppConfig, token: &str) -> Result<Vec<SecretRef>, 
             Ok(refs) => out.extend(refs),
             Err(e) => {
                 // A missing mount or ACL on one namespace must not abort the rest.
-                crate::log_warn!("sync: salto namespace {label}: {e}");
+                crate::log_warn!("sync: skipping namespace {label}: {e}");
             }
         }
     }
@@ -874,13 +874,13 @@ mod tests {
 
     #[test]
     fn a_not_active_node_is_retried_but_a_real_error_is_not() {
-        // El único 500 que se reintenta: el nodo que todavía no terminó de
-        // volverse activo (justo después de un unseal o de una elección de raft).
+        // The only 500 that is retried: the node that has not finished
+        // becoming active yet (right after an unseal or a raft election).
         assert!(is_not_active(
             500,
             r#"{"errors":["local node not active but active cluster node not found"]}"#
         ));
-        // Un 500 de verdad (storage roto, permiso) se reporta tal cual.
+        // A real 500 (broken storage, permission) is reported as it is.
         assert!(!is_not_active(500, r#"{"errors":["internal error"]}"#));
         assert!(!is_not_active(403, "permission denied"));
         assert!(!is_not_active(200, "not active"));
@@ -917,27 +917,27 @@ mod tests {
         assert_eq!(
             version_from_mounts(&body, "kv1"),
             MountLookup::Found(KvVersion::V1),
-            "sin options.version el mount es v1 - el caso de un backend heredado",
+            "without options.version the mount is v1 - the legacy backend case",
         );
         assert_eq!(
             version_from_mounts(&body, "numeric"),
             MountLookup::Found(KvVersion::V2),
-            "el número tambien cuenta"
+            "the number counts too"
         );
         assert_eq!(
-            version_from_mounts(&body, "otro"),
+            version_from_mounts(&body, "other"),
             MountLookup::Missing,
-            "sin mount no hay forma de leer"
+            "without the mount there is no way to read"
         );
         assert_eq!(
             version_from_mounts(&body, "transit"),
             MountLookup::Missing,
-            "otro engine en ese nombre no es KV"
+            "another engine under that name is not KV"
         );
         assert_eq!(
             version_from_mounts(&json!({ "errors": ["permission denied"] }), "kv"),
             MountLookup::Unavailable,
-            "sin data (ACL) hay que sondear"
+            "without data (ACL) it has to be probed"
         );
     }
 
@@ -980,7 +980,7 @@ mod tests {
         assert_eq!(
             destroy_url(&cfg, KvVersion::V1, "a/b").unwrap(),
             "http://127.0.0.1:8200/v1/kv/a/b",
-            "v1 no tiene metadata: borra el path"
+            "v1 has no metadata: it deletes the path"
         );
     }
 
@@ -1008,11 +1008,11 @@ mod tests {
         );
         assert!(
             fields_from_json(KvVersion::V1, v2.clone()).get("K").is_none(),
-            "leer un v2 con las rutas de v1 no encuentra el campo"
+            "reading a v2 with v1 paths does not find the field"
         );
         assert!(
             fields_from_json(KvVersion::V2, v1).is_empty(),
-            "leer un v1 con las rutas de v2 no inventa campos"
+            "reading a v1 with v2 paths does not invent fields"
         );
         assert!(fields_from_json(KvVersion::V2, json!({ "data": Value::Null })).is_empty());
     }

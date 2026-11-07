@@ -1,4 +1,5 @@
 /** Parse Meter paste JSON: kvpath + flat fields → path + editable rows. */
+import { t } from "./i18n";
 
 export type MeterJsonParsed = {
   namespace: string;
@@ -25,7 +26,7 @@ function coerceValue(v: unknown): string {
 
 export function parseMeterJson(raw: string): MeterJsonParsed {
   const text = raw.trim();
-  if (!text) throw new Error("JSON vacío");
+  if (!text) throw new Error(t("Empty JSON"));
 
   let data: unknown;
   try {
@@ -35,14 +36,14 @@ export function parseMeterJson(raw: string): MeterJsonParsed {
   }
 
   if (!data || typeof data !== "object" || Array.isArray(data)) {
-    throw new Error("se espera un objeto { kvpath, …campos }");
+    throw new Error(t("expected an object { kvpath, …fields }"));
   }
 
   const obj = data as Record<string, unknown>;
   const pathRaw = obj.kvpath ?? obj.path;
   const path =
     typeof pathRaw === "string" ? pathRaw.trim().replace(/^\/+|\/+$/g, "") : "";
-  if (!path) throw new Error("falta 'kvpath' (path OpenBao)");
+  if (!path) throw new Error(t("missing 'kvpath' (OpenBao path)"));
 
   const nsRaw = obj.namespace ?? obj.ns ?? obj.kvns ?? "";
   const namespace =
@@ -62,7 +63,7 @@ export function parseMeterJson(raw: string): MeterJsonParsed {
     rows.push({ key: k, value: coerceValue(val) });
   }
 
-  if (!rows.length) throw new Error("sin campos (solo meta kvpath/ns/title)");
+  if (!rows.length) throw new Error(t("no fields (only kvpath/ns/title metadata)"));
 
   return { namespace, path, title, rows };
 }

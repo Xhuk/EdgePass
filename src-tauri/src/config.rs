@@ -16,8 +16,8 @@ static TOKEN_CACHE: parking_lot::Mutex<Option<(std::time::Instant, Option<String
 /// The vault init file, **known only when the user configures it**.
 ///
 /// A public binary carries no paths of the machine it was built on: an install
-/// starts with this empty and Ajustes → Vault asks for it (or the user pastes a
-/// token directly). It is remembered only because the user typed it.
+/// starts with this empty and Settings → Vault asks for it (or the user pastes
+/// a token directly). It is remembered only because the user typed it.
 fn default_true() -> bool {
     true
 }
@@ -63,7 +63,7 @@ pub struct AppConfig {
     #[serde(default = "default_true")]
     pub auto_load_token: bool,
     /// Path to the vault init file (unseal keys + root token), only if the user
-    /// gave one: empty = not configured, and Ajustes → Vault asks for it. A
+    /// gave one: empty = not configured, and Settings → Vault asks for it. A
     /// token can also be pasted directly, in which case this stays empty.
     #[serde(default)]
     pub init_path: String,
@@ -83,7 +83,7 @@ pub struct AppConfig {
     #[serde(default = "default_true")]
     pub qring_governed: bool,
     /// The header LEDs, as data (see the `toggles` module). Capped by
-    /// `toggles::MAX_TOGGLES`; edited from Ajustes or over the pipe
+    /// `toggles::MAX_TOGGLES`; edited from Settings or over the pipe
     /// (`{"op":"toggles","set":[…]}`, validated against the published catalog).
     ///
     /// A file written before this field existed showed exactly three hardcoded
@@ -251,7 +251,7 @@ fn is_yaml(path: &Path) -> bool {
 pub fn parse_config(raw: &str, path: &Path) -> Result<AppConfig, String> {
     if is_yaml(path) {
         let value: serde_json::Value = serde_yaml_ng::from_str(raw)
-            .map_err(|e| format!("{}: YAML inválido: {e}", path.display()))?;
+            .map_err(|e| format!("{}: invalid YAML: {e}", path.display()))?;
         serde_json::from_value(value).map_err(|e| format!("{}: {e}", path.display()))
     } else {
         serde_json::from_str(raw).map_err(|e| format!("{}: {e}", path.display()))
@@ -288,7 +288,7 @@ pub fn db_path() -> Result<PathBuf, String> {
                     let _ = fs::copy(&old, &path);
                     let _ = fs::remove_file(&old);
                 }
-                crate::log_info!("índice movido a %LOCALAPPDATA%\\edgePass");
+                crate::log_info!("index moved to %LOCALAPPDATA%\\edgePass");
             }
         }
     }
@@ -349,7 +349,7 @@ where
                 cfg.auto_unseal = on;
                 applied.push(format!("EDGEPASS_AUTO_UNSEAL={raw}"));
             }
-            None => crate::log_warn!("EDGEPASS_AUTO_UNSEAL='{raw}' no es un booleano; lo ignoro"),
+            None => crate::log_warn!("EDGEPASS_AUTO_UNSEAL='{raw}' is not a boolean; ignoring it"),
         }
     }
 
@@ -360,7 +360,7 @@ where
                 applied.push(format!("EDGEPASS_AUTO_SEAL_IDLE={secs}"));
             }
             Err(e) => {
-                crate::log_warn!("EDGEPASS_AUTO_SEAL_IDLE='{raw}' no es un número ({e}); lo ignoro")
+                crate::log_warn!("EDGEPASS_AUTO_SEAL_IDLE='{raw}' is not a number ({e}); ignoring it")
             }
         }
     }
@@ -372,7 +372,7 @@ where
                 applied.push(format!("EDGEPASS_AUTO_COLLAPSE_IDLE={secs}"));
             }
             Err(e) => crate::log_warn!(
-                "EDGEPASS_AUTO_COLLAPSE_IDLE='{raw}' no es un número ({e}); lo ignoro"
+                "EDGEPASS_AUTO_COLLAPSE_IDLE='{raw}' is not a number ({e}); ignoring it"
             ),
         }
     }
@@ -380,7 +380,7 @@ where
     if let Some(raw) = value("EDGEPASS_NAMESPACES") {
         let namespaces = parse_namespaces(&raw);
         if namespaces.is_empty() {
-            crate::log_warn!("EDGEPASS_NAMESPACES='{raw}' no deja ningún namespace; lo ignoro");
+            crate::log_warn!("EDGEPASS_NAMESPACES='{raw}' leaves no namespace; ignoring it");
         } else {
             cfg.namespaces = namespaces;
             applied.push(format!("EDGEPASS_NAMESPACES={raw}"));
@@ -399,7 +399,7 @@ where
     applied
 }
 
-/// Same syntax as the Ajustes field: `.`, `integraciones` (`.` = root + every child ns).
+/// Same syntax as the Settings field: `.`, `integrations` (`.` = root + every child ns).
 fn parse_namespaces(raw: &str) -> Vec<String> {
     let mut seen = std::collections::HashSet::new();
     raw.split(',')
@@ -427,7 +427,7 @@ fn advertise_env_overrides(applied: &[String]) {
         return;
     }
     crate::log_warn!(
-        "overrides por entorno en efecto (no se guardan en config.json): {}",
+        "environment overrides in effect (they are not saved to config.json): {}",
         applied.join(", ")
     );
 }
@@ -441,7 +441,7 @@ fn migrate(cfg: &mut AppConfig) {
         return;
     }
     if let Err(e) = save_config(cfg) {
-        crate::log_warn!("no pude guardar la config migrada: {e}");
+        crate::log_warn!("could not save the migrated config: {e}");
     }
 }
 
@@ -455,14 +455,14 @@ fn migrate_values(cfg: &mut AppConfig) -> bool {
     if cfg.auto_seal_idle_secs == LEGACY_IDLE_SECS {
         cfg.auto_seal_idle_secs = 0;
         crate::log_warn!(
-            "config v1->v2: autoSealIdleSecs 300->0 (auto-sellar corta el vault a todos sus clientes; actívalo en Ajustes si lo quieres)"
+            "config v1->v2: autoSealIdleSecs 300->0 (auto-sealing cuts the vault off from all its clients; enable it in Settings if you want it)"
         );
     }
     if cfg.config_version < 3 {
         // Nothing to rewrite: the serde default already restored the three LEDs a
         // pre-v3 header hardcoded. Say where they live now, once.
         crate::log_info!(
-            "config v2->v3: los LEDs del header pasan a ser toggles[] configurables (siguen los de siempre; se editan en Ajustes → Toggles)"
+            "config v2->v3: header LEDs become configurable toggles[] (the usual ones are kept; edit them in Settings → Toggles)"
         );
     }
     if cfg.config_version < 4 {
@@ -480,7 +480,7 @@ fn migrate_values(cfg: &mut AppConfig) -> bool {
                 cfg.toggles.push(toggles::gw());
             }
             crate::log_info!(
-                "config v3->v4: el LED GW pasa a vigilar el runner local de GHA (Docker Desktop + contenedor); el proceso del Q-ring queda en el LED QR"
+                "config v3->v4: the GW LED now watches the local GHA runner (Docker Desktop + container); the Q-ring process moves to the QR LED"
             );
         }
     }
@@ -531,10 +531,10 @@ pub fn set_token(token: &str) -> Result<(), String> {
             Ok(()) | Err(keyring::Error::NoEntry) => {}
             Err(e) => return Err(e.to_string()),
         }
-        crate::log_info!("token borrado del keyring");
+        crate::log_info!("token deleted from the keyring");
     } else {
         entry.set_password(token).map_err(|e| e.to_string())?;
-        crate::log_info!("token guardado en el keyring");
+        crate::log_info!("token saved to the keyring");
     }
     *TOKEN_CACHE.lock() = None;
     Ok(())
@@ -551,7 +551,7 @@ pub fn bootstrap_token_from_init(init_path: &str) -> Result<bool, String> {
     }
     if init_path.trim().is_empty() {
         return Err(
-            "el init del vault no está configurado: definí Init JSON o pegá un token manual en Ajustes → Vault"
+            "the vault init file is not configured: set Init JSON or paste a token by hand in Settings → Vault"
                 .into(),
         );
     }
@@ -568,7 +568,7 @@ pub fn bootstrap_token_from_init(init_path: &str) -> Result<bool, String> {
         .ok_or_else(|| "root_token missing in init file".to_string())?;
     set_token(token)?;
     crate::log_warn!(
-        "token cargado desde {init_path}: es el ROOT token (scope total). Mejor un token hijo con policy acotada"
+        "token loaded from {init_path}: this is the ROOT token (full scope). A child token with a narrowed policy is better"
     );
     Ok(true)
 }
@@ -614,8 +614,8 @@ mod tests {
         assert_eq!(cfg.auto_seal_idle_secs, 900);
     }
 
-    /// v3→v4: el `GW` del Q-ring se muda a `QR` y `GW` estrena su trabajo nuevo (el
-    /// runner local), sin perder el control del gateway ni mover lo ya puesto.
+    /// v3→v4: the Q-ring `GW` moves to `QR` and `GW` gets its new job (the local
+    /// runner), without losing control of the gateway or moving what is already placed.
     #[test]
     fn gw_moves_to_qr_and_gets_its_new_job() {
         let mut cfg = AppConfig {
@@ -634,12 +634,12 @@ mod tests {
         assert_eq!(gw.probe, "gha.runner");
         assert_eq!(gw.on, "gha.up");
 
-        assert!(!migrate_values(&mut cfg), "la segunda pasada es no-op");
+        assert!(!migrate_values(&mut cfg), "the second pass is a no-op");
         let ids: Vec<&str> = cfg.toggles.iter().map(|t| t.id.as_str()).collect();
-        assert_eq!(ids, vec!["kv", "qr", "gov", "gw"], "no se duplica el GW");
+        assert_eq!(ids, vec!["kv", "qr", "gov", "gw"], "the GW is not duplicated");
     }
 
-    /// Un header editado a mano es una decisión, no un default: la migración no lo toca.
+    /// A hand-edited header is a decision, not a default: the migration leaves it alone.
     #[test]
     fn a_hand_edited_gw_is_left_alone() {
         let mut toggles = toggles::legacy_toggles();
@@ -651,7 +651,7 @@ mod tests {
         };
         assert!(migrate_values(&mut cfg));
         let ids: Vec<&str> = cfg.toggles.iter().map(|t| t.id.as_str()).collect();
-        assert_eq!(ids, vec!["kv", "gw", "gov"], "se conserva tal cual");
+        assert_eq!(ids, vec!["kv", "gw", "gov"], "kept as it is");
         assert_eq!(cfg.toggles[1].label, "GATE");
     }
 
@@ -699,12 +699,12 @@ mod tests {
             env_from(&[
                 ("EDGEPASS_AUTO_UNSEAL", " off "),
                 ("EDGEPASS_AUTO_SEAL_IDLE", "120"),
-                ("EDGEPASS_NAMESPACES", "., integraciones , facturas"),
+                ("EDGEPASS_NAMESPACES", "., integrations , invoices"),
             ]),
         );
         assert!(!cfg.auto_unseal);
         assert_eq!(cfg.auto_seal_idle_secs, 120);
-        assert_eq!(cfg.namespaces, vec!["", "integraciones", "facturas"]);
+        assert_eq!(cfg.namespaces, vec!["", "integrations", "invoices"]);
         assert_eq!(applied.len(), 3);
     }
 
@@ -715,8 +715,8 @@ mod tests {
         let applied = apply_env_overrides_with(
             &mut cfg,
             env_from(&[
-                ("EDGEPASS_AUTO_UNSEAL", "quizá"),
-                ("EDGEPASS_AUTO_SEAL_IDLE", "cinco"),
+                ("EDGEPASS_AUTO_UNSEAL", "maybe"),
+                ("EDGEPASS_AUTO_SEAL_IDLE", "five"),
                 ("EDGEPASS_NAMESPACES", "   "),
             ]),
         );
@@ -730,8 +730,8 @@ mod tests {
     fn namespaces_parse_like_the_settings_field() {
         assert_eq!(parse_namespaces("."), vec![""]);
         assert_eq!(
-            parse_namespaces(" integraciones , facturas "),
-            vec!["integraciones", "facturas"]
+            parse_namespaces(" integrations , invoices "),
+            vec!["integrations", "invoices"]
         );
         assert_eq!(parse_namespaces("a,a,."), vec!["a", ""]);
     }
@@ -793,8 +793,8 @@ configVersion: 4
             parse_config(yaml, Path::new("config.yaml")).expect("yaml should parse");
         let from_json =
             parse_config(json, Path::new("config.json")).expect("json should parse");
-        // Comparados como valor: `AppConfig` no deriva `PartialEq` y no hace
-        // falta que lo haga sólo por un test.
+        // Compared as a value: `AppConfig` does not derive `PartialEq`, and it
+        // does not need to just for a test.
         assert_eq!(
             serde_json::to_value(&from_yaml).unwrap(),
             serde_json::to_value(&from_json).unwrap()
@@ -817,7 +817,7 @@ configVersion: 4
         assert!(as_yaml.contains("mount: kv"), "got:\n{as_yaml}");
         let as_json = render_config(&cfg, Path::new("config.json")).unwrap();
         assert!(as_json.trim_start().starts_with('{'), "got:\n{as_json}");
-        // …y los dos se vuelven a leer igual.
+        // …and both read back the same.
         let a = parse_config(&as_yaml, Path::new("config.yaml")).unwrap();
         let b = parse_config(&as_json, Path::new("config.json")).unwrap();
         assert_eq!(

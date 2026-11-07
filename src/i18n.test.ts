@@ -24,7 +24,7 @@ function usedKeys(): Set<string> {
   const keys = new Set<string>();
   for (const file of sourceFiles(join(process.cwd(), "src"))) {
     const source = readFileSync(file, "utf8");
-    for (const match of source.matchAll(/\bt\(\s*"((?:[^"\\]|\\.)*)"\s*\)/g)) {
+    for (const match of source.matchAll(/\bt\(\s*"((?:[^"\\]|\\.)*)"\s*,?\s*\)/g)) {
       keys.add(match[1].replace(/\\"/g, '"').replace(/\\\\/g, "\\"));
     }
   }

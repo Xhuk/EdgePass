@@ -34,8 +34,8 @@ mod tests {
     fn answers_without_panicking_while_nobody_is_clicking() {
         // Run by cargo, so no user is holding the button over this process.
         match left_button_down() {
-            Some(held) => assert!(!held, "nadie está pulsando el ratón"),
-            None => {} // plataforma sin respuesta: es un caso válido
+            Some(held) => assert!(!held, "nobody is pressing the mouse"),
+            None => {} // platform with no answer: a valid case
         }
     }
 }

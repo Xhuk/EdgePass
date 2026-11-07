@@ -230,7 +230,7 @@ Traps, both real:
 
 - **`ConvertTo-Json` defaults to depth 2** in Windows PowerShell 5.1. A nested
   `services[]` object is silently flattened. Always `-Depth 8`.
-- **Do not register while Ajustes is open.** The panel holds a draft of the whole list
+- **Do not register while Settings is open.** The panel holds a draft of the whole list
   and its *Guardar* writes that draft back, undoing your change.
 
 Removing a service does **not** remove its LED: the LED turns amber with "probe
@@ -284,9 +284,9 @@ fresh install's list empty rather than shipping lights with nothing behind them.
 |---|---|
 | `{"ok":false,"error":…,"catalog":…}` | unknown probe/action id, or over the cap. The reply carries the vocabulary: fix from it |
 | the LED never appears | the id is not in `catalog.probes` — this build predates it |
-| amber with "falta el binario" | the `command`/`image` does not exist on this machine |
+| amber with "binary missing" | the `command`/`image` does not exist on this machine |
 | click does nothing, detail unchanged | the action ran but the probe disagrees: fix the probe, not the click |
-| the list reverted | Ajustes was open and its draft was saved over your change |
+| the list reverted | Settings was open and its draft was saved over your change |
 | `ConvertTo-Json` lost fields | missing `-Depth 8` |
 
 ## What not to do

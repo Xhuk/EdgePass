@@ -42,8 +42,8 @@ pub fn assert_local(addr: &str) -> Result<(), String> {
         .and_then(|u| u.host_str().map(|s| s.to_string()))
         .unwrap_or_else(|| addr.to_string());
     Err(format!(
-        "Rechazado '{host}': edgePass solo habla con OpenBao en loopback (127.0.0.1 / ::1 / localhost). \
-         Así el token nunca sale de esta máquina — cámbialo en Ajustes si de verdad quieres otro host."
+        "Rejected '{host}': edgePass only talks to OpenBao on loopback (127.0.0.1 / ::1 / localhost). \
+         That way the token never leaves this machine — change it in Settings if you really want another host."
     ))
 }
 
@@ -87,20 +87,20 @@ fn percent_decode(input: &str) -> String {
 fn check_segment(seg: &str) -> Result<(), String> {
     let decoded = percent_decode(seg);
     let verboten = if decoded == "." || decoded == ".." {
-        Some("no puede ser '.' ni '..'")
+        Some("cannot be '.' or '..'")
     } else if decoded.contains('/') || decoded.contains('\\') {
-        Some("no puede contener '/' ni '\\'")
+        Some("cannot contain '/' or '\\'")
     } else if decoded.contains('?') || decoded.contains('#') {
-        Some("no puede contener '?' ni '#'")
+        Some("cannot contain '?' or '#'")
     } else if decoded.contains('\0') || seg.chars().any(char::is_control) {
-        Some("no puede contener caracteres de control")
+        Some("cannot contain control characters")
     } else {
         None
     };
     match verboten {
         None => Ok(()),
         Some(why) => Err(format!(
-            "Ruta rechazada: el segmento '{seg}' {why}. edgePass no permite salir del path declarado."
+            "Path rejected: segment '{seg}' {why}. edgePass does not allow leaving the declared path."
         )),
     }
 }
@@ -169,7 +169,7 @@ mod tests {
         ] {
             assert!(
                 join_url("http://127.0.0.1:8200/", &["v1", "kv", "data", bad]).is_err(),
-                "debio rechazar {bad}"
+                "should have rejected {bad}"
             );
         }
     }
@@ -184,16 +184,16 @@ mod tests {
     #[test]
     fn accepts_real_key_names() {
         for good in [
-            "mi-api.example.com",
+            "my-api.example.com",
             "personal/logins/developer",
             "integrations/status/push-token",
             "a-b_c d",
             "100%",
-            "mi-app/surfaces/demo-runtime",
+            "my-app/surfaces/demo-runtime",
         ] {
             assert!(
                 join_url("http://127.0.0.1:8200/", &["v1", "kv", "data", good]).is_ok(),
-                "debio aceptar {good}"
+                "should have accepted {good}"
             );
         }
     }

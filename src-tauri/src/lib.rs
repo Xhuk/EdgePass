@@ -265,7 +265,7 @@ fn open_setup_link(id: String) -> Result<(), String> {
         "openbao_install" => OPENBAO_INSTALL_URL,
         "openbao_releases" => OPENBAO_RELEASES_URL,
         "readme" => SETUP_README_URL,
-        other => return Err(format!("link desconocido: {other}")),
+        other => return Err(format!("unknown link: {other}")),
     };
     open_external(url)
 }
@@ -279,21 +279,21 @@ fn open_external(url: &str) -> Result<(), String> {
             .args(["/C", "start", "", url])
             .creation_flags(CREATE_NO_WINDOW)
             .spawn()
-            .map_err(|e| format!("no pude abrir el navegador: {e}"))?;
+            .map_err(|e| format!("could not open the browser: {e}"))?;
     }
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("open")
             .arg(url)
             .spawn()
-            .map_err(|e| format!("no pude abrir el navegador: {e}"))?;
+            .map_err(|e| format!("could not open the browser: {e}"))?;
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
         std::process::Command::new("xdg-open")
             .arg(url)
             .spawn()
-            .map_err(|e| format!("no pude abrir el navegador: {e}"))?;
+            .map_err(|e| format!("could not open the browser: {e}"))?;
     }
     Ok(())
 }
@@ -310,8 +310,8 @@ pub struct BootstrapResult {
 
 /// Validates the `services[]` list without storing it.
 ///
-/// The Ajustes editor calls this while the JSON is being typed, so the error
-/// (missing command, empty probe, over the cap) appears before Guardar and with
+/// The Settings editor calls this while the JSON is being typed, so the error
+/// (missing command, empty probe, over the cap) appears before Save and with
 /// the same rules the save would apply. It returns the normalized list, which is
 /// also what the save will send.
 #[tauri::command]
@@ -332,19 +332,19 @@ pub(crate) async fn ensure_ready(state: &AppState) -> Result<(AppConfig, String)
         // Not fatal: if the keyring is empty and the init file is gone, the
         // token lookup below produces the message the user can act on.
         match bootstrap_token_from_init(&cfg.init_path) {
-            Ok(true) => crate::log_info!("token cargado del init al keyring"),
+            Ok(true) => crate::log_info!("token loaded from the init file into the keyring"),
             Ok(false) => {}
-            Err(e) => crate::log_warn!("no pude cargar el token del init: {e}"),
+            Err(e) => crate::log_warn!("could not load the token from the init file: {e}"),
         }
     }
 
     let token = config::get_token()?
-        .ok_or_else(|| "Sin token (activa auto-load o pégalo en ajustes)".to_string())?;
+        .ok_or_else(|| "No token (enable auto-load or paste it in Settings)".to_string())?;
 
     let status = seal_status(&cfg).await;
     if !status.reachable {
         crate::log_warn!(
-            "vault no responde ({}); intento arrancar el servicio OpenBao",
+            "vault is not answering ({}); trying to start the OpenBao service",
             status.message
         );
         let _ = winservice::ensure_running();
@@ -358,12 +358,12 @@ pub(crate) async fn ensure_ready(state: &AppState) -> Result<(AppConfig, String)
     let status = seal_status(&cfg).await;
     if status.sealed {
         if !cfg.auto_unseal {
-            return Err("OpenBao sellado (auto-unseal desactivado)".into());
+            return Err("OpenBao is sealed (auto-unseal is off)".into());
         }
-        crate::log_info!("vault sellado: abriendo con las keys del init");
+        crate::log_info!("vault is sealed: opening it with the keys from the init file");
         let after = ensure_unsealed(&cfg).await?;
         if after.sealed {
-            return Err(format!("No se pudo abrir: {}", after.message));
+            return Err(format!("Could not open it: {}", after.message));
         }
     }
 
@@ -404,8 +404,8 @@ fn status_snapshot(state: &AppState, cfg: &AppConfig, seal: SealStatusDto) -> St
         init_path: cfg.init_path.clone(),
         seal,
         idle_secs: idle,
-        // El poll de la UI (5s) usa la caché: no lanzamos `sc.exe` por tick.
-        // El estado real (y fresco) se consulta al arrancar el servicio y en el bootstrap.
+        // The UI poll (5s) uses the cache: we do not spawn `sc.exe` per tick.
+        // The real (and fresh) state is queried when the service starts and on bootstrap.
         service: winservice::status_cached(),
         toggles: leds,
         catalog: toggles::catalog(cfg),
@@ -435,13 +435,13 @@ async fn refresh_seal() -> Result<SealStatusDto, String> {
     Ok(seal_status(&cfg).await)
 }
 
-/// Un comando de diagnóstico escrito desde la webview, al mismo log que el resto
-/// (`%APPDATA%\edgePass\logs\edgepass.log`).
+/// A diagnostic command written from the webview, to the same log as everything
+/// else (`%APPDATA%\edgePass\logs\edgepass.log`).
 ///
-/// Existe porque el pipeline de geometría —mediciones, decisions de tamaño y los
-/// frames del spring— no se puede diagnosticar con una captura: pasa en el
-/// tiempo. La webview manda tandas cada 250 ms y acá se escriben tal cual, así
-/// `Get-Content -Tail` cuenta la historia completa.
+/// It exists because the geometry pipeline — measurements, size decisions and
+/// the spring frames — cannot be diagnosed with a screenshot: it happens over
+/// time. The webview sends batches every 250 ms and they are written here as
+/// they arrive, so `Get-Content -Tail` tells the whole story.
 #[tauri::command]
 fn ui_log(msg: String) {
     for line in msg.lines().filter(|l| !l.trim().is_empty()) {
@@ -488,7 +488,7 @@ async fn mcp_control(
 /// Mints a fresh token, writes it where the row's `secretEnv` entry for `key`
 /// points, and returns it so the panel can show it for copying.
 ///
-/// This is the «generar token» button. The value is created here, stored in
+/// This is the «generate token» button. The value is created here, stored in
 /// OpenBao, and injected into the server's environment at spawn time — it is
 /// never written to `config.json`, never logged, and never carried by the pipe.
 #[tauri::command]
@@ -503,10 +503,10 @@ async fn mcp_mint_token(
             .mcp_servers
             .iter()
             .find(|s| s.id == id.trim())
-            .ok_or_else(|| format!("servidor MCP desconocido: '{id}'"))?;
+            .ok_or_else(|| format!("unknown MCP server: '{id}'"))?;
         let want = s.secret_env.iter().find(|e| e.key == key.trim()).ok_or_else(|| {
             format!(
-                "'{}' no declara secretEnv para '{}': agregalo en el panel MCP",
+                "'{}' does not declare secretEnv for '{}': add it in the MCP panel",
                 s.label, key
             )
         })?;
@@ -522,13 +522,13 @@ async fn mcp_mint_token(
     crate::openbao::upsert_secret_field(&cfg, &token, &namespace, &path, &field, &value, false)
         .await
         .map_err(|e| format!("{label}: {namespace}/{path}: {e}"))?;
-    crate::log_info!("mcp: token nuevo para {label} en {namespace}/{path} campo {field}");
+    crate::log_info!("mcp: new token for {label} in {namespace}/{path} field {field}");
     Ok(value)
 }
 
 /// Builds a Diceware passphrase inside the widget.
 ///
-/// This is the «sugerir» button of the Meter tab. The value is created here and
+/// This is the «suggest» button of the Meter tab. The value is created here and
 /// shown in the row the person asked to fill. It is written nowhere else: it
 /// does not travel over the local pipe, it is not logged, and it does not reach
 /// the clipboard until the person copies it.
@@ -539,7 +539,7 @@ fn make_passphrase(options: passphrase::Options) -> Result<passphrase::Made, Str
     let made = passphrase::make_with(&options, &salt)?;
     // Only the shape is recorded. The value stays out of the log.
     crate::log_info!(
-        "passphrase: {} palabras, {:.1} bits, {} caracteres",
+        "passphrase: {} words, {:.1} bits, {} characters",
         made.words,
         made.entropy_bits,
         made.length
@@ -559,13 +559,13 @@ fn ensure_install_salt(cfg: &mut AppConfig) -> Vec<u8> {
         if crate::rand::fill(&mut bytes).is_ok() {
             cfg.install_salt = bytes.iter().map(|b| format!("{b:02x}")).collect();
             if let Err(e) = save_config(cfg) {
-                crate::log_warn!("no pude guardar el salt de instalación: {e}");
+                crate::log_warn!("could not save the install salt: {e}");
             }
         }
     }
     let salt = decode_hex(&cfg.install_salt);
     if salt.is_empty() && !cfg.install_salt.trim().is_empty() {
-        crate::log_warn!("installSalt inválido: se ignora");
+        crate::log_warn!("invalid installSalt: ignored");
     }
     salt
 }
@@ -613,7 +613,7 @@ fn save_passphrase_config(
     };
     save_config(&cfg)?;
     crate::log_info!(
-        "passphrase: estilo guardado ({} palabras, separador {:?}, compatible={})",
+        "passphrase: style saved ({} words, separator {:?}, compatible={})",
         cfg.passphrase.words,
         cfg.passphrase.separator,
         cfg.passphrase.compatible
@@ -647,7 +647,7 @@ pub(crate) async fn seal_vault_now(cfg: &AppConfig) -> Result<SealStatusDto, Str
     if !has_token() && cfg.auto_load_token {
         let _ = bootstrap_token_from_init(&cfg.init_path)?;
     }
-    let token = config::get_token()?.ok_or_else(|| "Sin token para sellar".to_string())?;
+    let token = config::get_token()?.ok_or_else(|| "No token to seal with".to_string())?;
     seal(cfg, &token).await
 }
 
@@ -693,11 +693,11 @@ async fn bootstrap(state: State<'_, Arc<AppState>>) -> Result<BootstrapResult, S
     // Check service status (do NOT auto-start — let the user decide)
     let svc = winservice::status();
     if svc.installed && !svc.running {
-        parts.push(format!("svc: {} (detenido)", svc.state));
+        parts.push(format!("svc: {} (stopped)", svc.state));
     } else if svc.installed && svc.running {
         parts.push("svc OK".into());
     } else {
-        parts.push("svc: no instalado (modo API)".into());
+        parts.push("svc: not installed (API mode)".into());
     }
 
     let mut seal = seal_status(&cfg).await;
@@ -708,7 +708,7 @@ async fn bootstrap(state: State<'_, Arc<AppState>>) -> Result<BootstrapResult, S
             token_loaded: false,
             unsealed_now: false,
             synced: None,
-            message: "OpenBao API no responde — revisa servicio OpenBao".into(),
+            message: "OpenBao API is not answering — check the OpenBao service".into(),
         });
     }
 
@@ -718,7 +718,7 @@ async fn bootstrap(state: State<'_, Arc<AppState>>) -> Result<BootstrapResult, S
                 token_loaded = true;
                 parts.push("token OK".into());
             }
-            Ok(false) => parts.push("token ya había".into()),
+            Ok(false) => parts.push("token already there".into()),
             Err(e) => parts.push(format!("token: {e}")),
         }
     }
@@ -729,11 +729,11 @@ async fn bootstrap(state: State<'_, Arc<AppState>>) -> Result<BootstrapResult, S
                 unsealed_now = !s.sealed;
                 seal = s;
                 if unsealed_now {
-                    parts.push("abierto".into());
+                    parts.push("open".into());
                     touch(state.inner());
                 }
             }
-            Err(e) => parts.push(format!("abrir: {e}")),
+            Err(e) => parts.push(format!("open: {e}")),
         }
     }
 
@@ -741,7 +741,7 @@ async fn bootstrap(state: State<'_, Arc<AppState>>) -> Result<BootstrapResult, S
         match sync_index_inner(state.inner()).await {
             Ok(n) => {
                 synced = Some(n);
-                parts.push(format!("{n} claves"));
+                parts.push(format!("{n} keys"));
             }
             Err(e) => parts.push(format!("sync: {e}")),
         }
@@ -846,7 +846,7 @@ fn arm_reveal_backstop(win: tauri::WebviewWindow) {
     std::thread::spawn(move || {
         std::thread::sleep(std::time::Duration::from_millis(REVEAL_BACKSTOP_MS));
         if !matches!(win.is_visible(), Ok(true)) {
-            crate::log_warn!("la UI no avisó de que estaba lista; muestro la ventana igual");
+            crate::log_warn!("the UI never reported it was ready; showing the window anyway");
             let _ = win.show();
         }
     });
@@ -867,7 +867,7 @@ fn save_placement(placement: placement::Placement) -> Result<(), String> {
 }
 
 /// Reveal the window — see `arm_reveal_backstop`.
-/// The committee's notices, as the pill's counter and the Avisos panel need
+/// The committee's notices, as the pill's counter and the Notices panel need
 /// them: the tail of `steering-notices.jsonl` plus how many lines are still
 /// unseen. Never fails: a missing or half-written file is "no notices", not a
 /// broken header.
@@ -983,11 +983,11 @@ fn save_settings(
             Some(list) => crate::mcp::validate(list)?,
             None => prev.mcp_servers,
         },
-        // …and for the owner's services: the Servicios editor sends the whole list.
+        // …and for the owner's services: the Services editor sends the whole list.
         services: next_services,
-        // Y lo mismo para el runner local de GHA y sus rutas: los lleva el LED GW y
-        // el script `gha-local.ps1`, no el formulario de Ajustes — así que un
-        // *Guardar* no los borra.
+        // And the same for the local GHA runner and its paths: they belong to the
+        // GW LED and the `gha-local.ps1` script, not the Settings form — so a
+        // *Save* does not wipe them.
         gha_runners: prev.gha_runners,
         gha_dir: prev.gha_dir,
         docker_desktop_exe: prev.docker_desktop_exe,
@@ -997,7 +997,7 @@ fn save_settings(
         cloudflared_exe: prev.cloudflared_exe,
         gha_watch: prev.gha_watch,
         // The passphrase style has its own command (`save_passphrase_config`):
-        // a Guardar in Ajustes must not reset it to the defaults.
+        // a Save in Settings must not reset it to the defaults.
         passphrase: prev.passphrase,
         // The install salt belongs to the machine, not to the form.
         install_salt: prev.install_salt,
@@ -1020,7 +1020,7 @@ fn save_settings(
         }
     }
     crate::log_info!(
-        "ajustes guardados: addr={} mount={} ns={:?} autoUnseal={} autoSealIdle={}s autoCollapseIdle={}s autoSync={} autoToken={} toggles={}",
+        "settings saved: addr={} mount={} ns={:?} autoUnseal={} autoSealIdle={}s autoCollapseIdle={}s autoSync={} autoToken={} toggles={}",
         cfg.bao_addr,
         cfg.mount,
         cfg.namespaces,
@@ -1083,14 +1083,14 @@ async fn reveal_and_copy(
     {
         let store = state.store.lock();
         store.record_use_ref(&namespace, &path, &key)?;
-        // Nota autogenerada: el acceso queda escrito *al lado* del secreto, en la
-        // base local (el vault no guarda comentarios). `auto` la distingue de las
-        // que escribe una persona o el agente.
+        // Self-generated note: the access is written *next to* the secret, in the
+        // local database (the vault keeps no comments). `auto` tells it apart from
+        // the ones a person or the agent write.
         let _ = store.add_note(
             &namespace,
             &path,
             &key,
-            "copiada al portapapeles desde el widget",
+            "copied to the clipboard from the widget",
             "auto",
             "ui",
         );
@@ -1101,7 +1101,7 @@ async fn reveal_and_copy(
     } else {
         namespace.as_str()
     };
-    crate::log_info!("copiado {ns}/{path} · {key}");
+    crate::log_info!("copied {ns}/{path} · {key}");
     Ok(format!("{ns}/{path} · {key}"))
 }
 
@@ -1112,8 +1112,8 @@ pub struct SecretFieldDto {
     pub value: String,
 }
 
-/// Las notas de un path (o de un campo concreto). Nada de valores: sólo
-/// referencias y texto escrito por una persona, por el agente o por edgePass.
+/// The notes on a path (or on one specific field). No values: only
+/// references and text written by a person, by the agent or by edgePass.
 #[tauri::command]
 fn notes_list(
     state: State<'_, Arc<AppState>>,
@@ -1131,7 +1131,7 @@ fn notes_list(
     )
 }
 
-/// Agrega una nota a mano (desde el widget o el agente).
+/// Adds a note by hand (from the widget or the agent).
 #[tauri::command]
 fn notes_add(
     state: State<'_, Arc<AppState>>,
@@ -1142,7 +1142,7 @@ fn notes_add(
     actor: Option<String>,
 ) -> Result<Vec<store::Note>, String> {
     if path.trim().is_empty() {
-        return Err("path es requerido".into());
+        return Err("path is required".into());
     }
     {
         let store = state.store.lock();
@@ -1174,20 +1174,20 @@ async fn read_secret_path(
     };
     let path = path.trim().trim_matches('/').to_string();
     if path.is_empty() {
-        return Err("path es requerido".into());
+        return Err("path is required".into());
     }
     let map = read_secret_map(&cfg, &token, &ns, &path)
         .await
         .map_err(|e| e.to_string())?;
     if !map.is_empty() {
-        // El editor también es un acceso: una línea por vez que se lee el path
-        // completo (`read_secret_path` es lo que usa Meter y el alta inline).
+        // The editor is an access too: one line each time the whole path is
+        // read (`read_secret_path` is what Meter and the inline create use).
         let store = state.store.lock();
         let _ = store.add_note(
             &ns,
             &path,
             "",
-            &format!("leído para editar ({} campos)", map.len()),
+            &format!("read for editing ({} fields)", map.len()),
             "auto",
             "ui",
         );
@@ -1214,15 +1214,15 @@ async fn delete_secret(
     let path = path.trim().trim_matches('/').to_string();
     let key = key.trim().to_string();
     if path.is_empty() || key.is_empty() {
-        return Err("path y key son requeridos".into());
+        return Err("path and key are required".into());
     }
     delete_secret_key(&cfg, &token, &ns, &path, &key)
         .await
         .map_err(|e| e.to_string())?;
     let _ = sync_index_inner(state.inner()).await;
     let label_ns = if ns.is_empty() { "root" } else { ns.as_str() };
-    crate::log_info!("borrado {label_ns}/{path} · {key}");
-    Ok(format!("Borrado {label_ns}/{path} · {key}"))
+    crate::log_info!("deleted {label_ns}/{path} · {key}");
+    Ok(format!("Deleted {label_ns}/{path} · {key}"))
 }
 
 #[tauri::command]
@@ -1243,10 +1243,10 @@ async fn upsert_secret(
     let path = path.trim().trim_matches('/').to_string();
     let key = key.trim().to_string();
     if path.is_empty() || key.is_empty() {
-        return Err("path y key son requeridos".into());
+        return Err("path and key are required".into());
     }
     if value.is_empty() {
-        return Err("value no puede estar vacío".into());
+        return Err("value cannot be empty".into());
     }
 
     upsert_secret_field(
@@ -1307,7 +1307,7 @@ async fn upsert_secret_batch(
     };
     let path = path.trim().trim_matches('/').to_string();
     if path.is_empty() {
-        return Err("path es requerido".into());
+        return Err("path is required".into());
     }
     let pairs: Vec<(String, String)> = fields
         .into_iter()
@@ -1315,7 +1315,7 @@ async fn upsert_secret_batch(
         .filter(|(k, v)| !k.is_empty() && !v.is_empty())
         .collect();
     if pairs.is_empty() {
-        return Err("completa al menos una variable con valor".into());
+        return Err("fill in at least one variable with a value".into());
     }
 
     let names: Vec<String> = pairs.iter().map(|(k, _)| k.clone()).collect();
@@ -1368,7 +1368,7 @@ async fn import_logins(
     replace_all: Option<bool>,
 ) -> Result<LoginImportResult, String> {
     if rows.is_empty() {
-        return Err("no hay filas para importar".into());
+        return Err("there are no rows to import".into());
     }
     let (cfg, token) = ensure_ready(state.inner()).await?;
     let replace = replace_all.unwrap_or(true);
@@ -1421,9 +1421,9 @@ async fn import_logins(
     }
 
     let _ = sync_index_inner(state.inner()).await;
-    crate::log_info!("import logins: {imported} ok, {skipped} omitidos");
+    crate::log_info!("import logins: {imported} ok, {skipped} skipped");
     Ok(LoginImportResult {
-        message: format!("Importados {imported} · omitidos {skipped}"),
+        message: format!("Imported {imported} · skipped {skipped}"),
         imported,
         skipped,
         paths,
@@ -1467,7 +1467,7 @@ fn path_or_dash(path: Result<std::path::PathBuf, String>) -> String {
 
 /// Everything needed to debug a bad install in one call: which binary is
 /// actually running, where its files live, what the vault and the Windows
-/// service look like, and the tail of the log. The Diagnóstico panel renders
+/// service look like, and the tail of the log. The Diagnostics panel renders
 /// it and copies it as a report.
 #[tauri::command]
 async fn diagnostics(state: State<'_, Arc<AppState>>) -> Result<DiagnosticsDto, String> {
@@ -1541,7 +1541,7 @@ fn webview2_version() -> String {
             }
         }
     }
-    "no encontrado (¿WebView2 Runtime instalado?)".into()
+    "not found (is the WebView2 Runtime installed?)".into()
 }
 
 #[cfg(not(windows))]
@@ -1549,7 +1549,7 @@ fn webview2_version() -> String {
     "n/a".into()
 }
 
-/// The Diagnóstico panel copies through here, so the frontend needs no
+/// The Diagnostics panel copies through here, so the frontend needs no
 /// clipboard binding of its own.
 #[tauri::command]
 fn copy_to_clipboard(app: tauri::AppHandle, text: String) -> Result<(), String> {
@@ -1590,11 +1590,11 @@ fn spawn_vault_guardian(state: Arc<AppState>) {
                             match seal(&cfg, &token).await {
                                 Ok(s) if s.sealed => {
                                     crate::log_warn!(
-                                        "auto-seal tras {idle}s de inactividad del widget: el vault queda cerrado para TODOS sus clientes"
+                                        "auto-seal after {idle}s of widget idle: the vault stays closed to ALL its clients"
                                     );
                                 }
                                 Ok(_) => {}
-                                Err(e) => crate::log_error!("auto-seal falló: {e}"),
+                                Err(e) => crate::log_error!("auto-seal failed: {e}"),
                             }
                         }
                     }
@@ -1618,17 +1618,17 @@ pub fn run() {
         Ok(true) => {}
         Ok(false) => {
             crate::log_warn!(
-                "edgePass ya está corriendo en esta sesión: este proceso se cierra para no competir por \\\\.\\pipe\\edgepass"
+                "edgePass is already running in this session: this process exits so it does not compete for \\\\.\\pipe\\edgepass"
             );
             ipc::notify_existing();
             return;
         }
         Err(e) => crate::log_warn!(
-            "no pude tomar el mutex de instancia única ({e}); sigo, y dos instancias podrían competir por el pipe"
+            "could not take the single-instance mutex ({e}); continuing, and two instances could compete for the pipe"
         ),
     }
     if ipc::notify_existing() {
-        crate::log_info!("ya hay una instancia corriendo: le paso el foco y salgo");
+        crate::log_info!("an instance is already running: handing it focus and exiting");
         return;
     }
 
@@ -1650,18 +1650,18 @@ pub fn run() {
     let db = match config::db_path() {
         Ok(p) => p,
         Err(e) => {
-            crate::log_error!("no pude resolver el directorio de datos: {e}");
+            crate::log_error!("could not resolve the data directory: {e}");
             return;
         }
     };
     let store = match Store::open(&db) {
         Ok(s) => s,
         Err(e) => {
-            crate::log_error!("no pude abrir la base de datos {}: {e}", db.display());
+            crate::log_error!("could not open the database {}: {e}", db.display());
             return;
         }
     };
-    crate::log_info!("db en {}", db.display());
+    crate::log_info!("db at {}", db.display());
 
     let state = Arc::new(AppState {
         store: Mutex::new(store),
@@ -1683,11 +1683,11 @@ pub fn run() {
             if let Some(win) = app.get_webview_window("main") {
                 match win.url() {
                     Ok(u) => crate::log_info!("webview url={u}"),
-                    Err(e) => crate::log_warn!("webview url no disponible: {e}"),
+                    Err(e) => crate::log_warn!("webview url not available: {e}"),
                 }
                 arm_reveal_backstop(win);
             }
-            crate::log_info!("ventana lista (oculta hasta que la UI restaure su sitio)");
+            crate::log_info!("window ready (hidden until the UI restores its spot)");
             spawn_vault_guardian(guardian_state);
             ipc::spawn(ipc_state, app.handle().clone());
             // MCP servers flagged `autostart` come up with the widget, which the
@@ -1700,7 +1700,7 @@ pub fn run() {
                     let cfg = match load_config() {
                         Ok(c) => c,
                         Err(e) => {
-                            crate::log_warn!("MCP autostart: no pude leer la config: {e}");
+                            crate::log_warn!("MCP autostart: could not read the config: {e}");
                             return;
                         }
                     };
@@ -1712,7 +1712,7 @@ pub fn run() {
                         let state = handle.state::<Arc<AppState>>().inner().clone();
                         match ensure_ready(&state).await {
                             Ok((fresh, token)) => secrets = mcp::resolve_all(&fresh, &token).await,
-                            Err(e) => crate::log_warn!("MCP autostart sin vault: {e}"),
+                            Err(e) => crate::log_warn!("MCP autostart without vault: {e}"),
                         }
                     }
                     let notes = tauri::async_runtime::spawn_blocking(move || {
@@ -1725,11 +1725,11 @@ pub fn run() {
                     }
                 });
             }
-            // El visor de logs del runner local se abre solo: cada 3 s se mira si algún
-            // runner arrancó un job y, si lo hizo, se le abre la ventana (`-Watch`).
-            // Existe porque el runner no vuelca la salida de los steps a su stdout: sin
-            // esto, para saber que algo corre (o por qué falló) hay que ir a GitHub.
-            // `ghaWatch:false` lo apaga; el LED sigue diciendo qué job está en curso.
+            // The local runner's log viewer opens by itself: every 3 s it checks whether
+            // a runner started a job and, if so, opens the window (`-Watch`).
+            // It exists because the runner does not dump the steps' output to its stdout:
+            // without this, to know something is running (or why it failed) you go to GitHub.
+            // `ghaWatch:false` turns it off; the LED still says which job is in flight.
             {
                 let state = app.state::<Arc<AppState>>().inner().clone();
                 tauri::async_runtime::spawn(async move {
@@ -1758,11 +1758,11 @@ pub fn run() {
                                 .lock()
                                 .insert(id.clone(), job.started.clone());
                             crate::log_info!(
-                                "runner {id}: arrancó el job «{}» — abro el visor de logs",
+                                "runner {id}: job «{}» started — opening the log viewer",
                                 job.name
                             );
                             if let Err(e) = crate::gha::open_viewer(&cfg, &id) {
-                                crate::log_warn!("no pude abrir el visor de logs: {e}");
+                                crate::log_warn!("could not open the log viewer: {e}");
                             }
                         }
                     }
@@ -1826,7 +1826,7 @@ pub fn run() {
         .run(tauri::generate_context!());
 
     if let Err(e) = result {
-        crate::log_error!("error fatal al correr edgePass: {e}");
+        crate::log_error!("fatal error running edgePass: {e}");
     }
 }
 
@@ -1843,7 +1843,7 @@ mod setup_tests {
             progress: 0,
             threshold: 3,
             version: None,
-            message: "sonda".into(),
+            message: "probe".into(),
         }
     }
 
@@ -1900,8 +1900,8 @@ mod salt_tests {
     fn hex_round_trips_and_rejects_noise() {
         assert_eq!(decode_hex("00ff10"), vec![0x00, 0xff, 0x10]);
         assert_eq!(decode_hex(" 0A0b "), vec![0x0a, 0x0b]);
-        assert!(decode_hex("0").is_empty(), "largo impar");
-        assert!(decode_hex("zz").is_empty(), "no es hex");
+        assert!(decode_hex("0").is_empty(), "odd length");
+        assert!(decode_hex("zz").is_empty(), "not hex");
         assert!(decode_hex("").is_empty());
     }
 }

@@ -72,7 +72,7 @@ pub fn load() -> Option<Placement> {
     let path = match path() {
         Ok(p) => p,
         Err(e) => {
-            crate::log_warn!("no pude resolver placement.json: {e}");
+            crate::log_warn!("could not resolve placement.json: {e}");
             return None;
         }
     };
@@ -91,7 +91,7 @@ pub fn load() -> Option<Placement> {
         Some(placement)
     })?;
     crate::log_info!(
-        "arranco donde quedé: dock={:?} monitor='{}' centro=({:.3}, {:.3})",
+        "starting where I left off: dock={:?} monitor='{}' centre=({:.3}, {:.3})",
         placement.dock,
         placement.monitor,
         placement.x,
@@ -109,7 +109,7 @@ fn load_from(path: &Path) -> Option<Placement> {
         Ok(raw) => raw,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
         Err(e) => {
-            crate::log_warn!("no pude leer {}: {e}", path.display());
+            crate::log_warn!("could not read {}: {e}", path.display());
             return None;
         }
     };
@@ -122,7 +122,7 @@ fn load_from(path: &Path) -> Option<Placement> {
         Ok(placement) => placement.sanitized(),
         Err(e) => {
             crate::log_warn!(
-                "{} no es un placement válido ({e}); arranco donde el SO me ponga",
+                "{} is not a valid placement ({e}); starting where the OS puts me",
                 path.display()
             );
             None

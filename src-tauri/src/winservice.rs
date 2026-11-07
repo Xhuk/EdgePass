@@ -9,16 +9,16 @@ use std::os::windows::process::CommandExt;
 
 const SERVICE_NAME: &str = "OpenBao";
 
-/// `sc.exe` es un binario de consola y edgePass corre como app GUI
-/// (`windows_subsystem = "windows"`, sin consola padre): sin este flag cada
-/// spawn le asigna Windows una **consola nueva y visible**. El poll de estado
-/// de la UI (cada 5s) hacía parpadear una ventana de cmd en bucle.
+/// `sc.exe` is a console binary and edgePass runs as a GUI app
+/// (`windows_subsystem = "windows"`, no parent console): without this flag every
+/// spawn gets a **new, visible** console from Windows. The UI's status poll
+/// (every 5s) made a cmd window flash in a loop.
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-/// TTL de la caché de estado usada por el poll de la UI. El servicio OpenBao
-/// vive por su cuenta; la pastilla tolera 15s de latencia y así no se lanza un
-/// proceso por tick.
+/// Status cache TTL used by the UI poll. The OpenBao service runs on its own;
+/// the pill tolerates 15s of latency and that way no process is launched per
+/// tick.
 const STATUS_CACHE_TTL: Duration = Duration::from_secs(15);
 
 static STATUS_CACHE: parking_lot::Mutex<Option<(Instant, ServiceStatusDto)>> =
@@ -106,9 +106,9 @@ pub fn status() -> ServiceStatusDto {
                 running,
                 state: state.clone(),
                 message: if running {
-                    "Servicio OpenBao en ejecución".into()
+                    "OpenBao service running".into()
                 } else {
-                    format!("Servicio OpenBao: {state}")
+                    format!("OpenBao service: {state}")
                 },
             }
         }
@@ -131,10 +131,10 @@ pub fn start() -> Result<ServiceStatusDto, String> {
     if !cur.installed {
         return Err(cur.message);
     }
-    // `sc start` devuelve estado no-cero a veces incluso arrancando bien: el
-    // estado real manda, lo re-consultamos abajo.
+    // `sc start` sometimes returns a non-zero state even when it starts fine:
+    // the real state is what counts, so we re-query it below.
     let _ = sc(&["start", SERVICE_NAME]);
-    // Espera acotada (~5s) sondeando cada 1s en lugar de 20 spawns seguidos.
+    // Bounded wait (~5s) probing every 1s instead of 20 spawns in a row.
     for tick in 0..20u32 {
         std::thread::sleep(Duration::from_millis(250));
         if tick % 4 != 3 {
@@ -152,7 +152,7 @@ pub fn start() -> Result<ServiceStatusDto, String> {
         Ok(s)
     } else {
         Err(format!(
-            "No arrancó el servicio OpenBao (estado={}). ¿Necesitas Admin?",
+            "The OpenBao service did not start (state={}). Do you need Admin?",
             s.state
         ))
     }
@@ -172,9 +172,9 @@ pub fn ensure_running() -> Result<ServiceStatusDto, String> {
     start()
 }
 
-/// Estado con caché corta: lo usa el poll de la UI (5s). No spawnea `sc.exe` en
-/// cada tick y, como OpenBao corre por su cuenta, 15s de latencia en la pastilla
-/// no cambian ninguna decisión (el auto-unseal va por HTTP, no por `sc.exe`).
+/// Status with a short cache: used by the UI poll (5s). It does not spawn
+/// `sc.exe` on every tick and, since OpenBao runs on its own, 15s of latency in
+/// the pill changes no decision (auto-unseal goes over HTTP, not `sc.exe`).
 pub fn status_cached() -> ServiceStatusDto {
     {
         let cache = STATUS_CACHE.lock();

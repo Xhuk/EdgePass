@@ -113,11 +113,11 @@ pub fn list(limit: Option<usize>) -> Notices {
     match (jsonl_path(), seen_path()) {
         (Ok(jsonl), Ok(seen)) => list_from(&jsonl, &seen, limit),
         (Err(e), _) => {
-            crate::log_warn!("no pude resolver steering-notices.jsonl: {e}");
+            crate::log_warn!("could not resolve steering-notices.jsonl: {e}");
             Notices::empty()
         }
         (_, Err(e)) => {
-            crate::log_warn!("no pude resolver steering-notices.seen.json: {e}");
+            crate::log_warn!("could not resolve steering-notices.seen.json: {e}");
             Notices::empty()
         }
     }
@@ -165,7 +165,7 @@ fn seen_count(path: &Path) -> usize {
     match serde_json::from_str::<Seen>(strip_bom(&raw)) {
         Ok(seen) => seen.seen,
         Err(e) => {
-            crate::log_warn!("{} no es un mark válido ({e}); cuento todo como nuevo", path.display());
+            crate::log_warn!("{} is not a valid mark ({e}); counting everything as new", path.display());
             0
         }
     }
@@ -176,7 +176,7 @@ fn read_notices(path: &Path) -> Vec<Notice> {
         Ok(raw) => raw,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Vec::new(),
         Err(e) => {
-            crate::log_warn!("no pude leer {}: {e}", path.display());
+            crate::log_warn!("could not read {}: {e}", path.display());
             return Vec::new();
         }
     };
@@ -192,7 +192,7 @@ fn parse_lines(raw: &str) -> Vec<Notice> {
         .filter_map(|line| match serde_json::from_str::<Notice>(line) {
             Ok(notice) => Some(notice),
             Err(e) => {
-                crate::log_warn!("línea ilegible en steering-notices.jsonl ({e})");
+                crate::log_warn!("unreadable line in steering-notices.jsonl ({e})");
                 None
             }
         })
@@ -240,7 +240,7 @@ mod tests {
         );
         let got = list_from(&jsonl, &seen, 50);
         assert_eq!(got.total, 2);
-        assert_eq!(got.unseen, 2, "sin mark, todo es nuevo");
+        assert_eq!(got.unseen, 2, "with no mark, everything is new");
         assert_eq!(got.items[0].name, "016-nota.md");
         assert_eq!(got.items[1].name, "003-nota.md");
         let _ = fs::remove_file(&jsonl);
@@ -257,7 +257,7 @@ mod tests {
         let got = list_from(&jsonl, &seen, 2);
         assert_eq!(got.items.len(), 2);
         assert_eq!(got.items[0].name, "005.md");
-        assert_eq!(got.total, 5, "el contador no se limita al panel");
+        assert_eq!(got.total, 5, "the counter is not limited to the panel");
         let _ = fs::remove_file(&jsonl);
     }
 
@@ -272,7 +272,7 @@ mod tests {
         let last = line("2026-10-06T16:32:27-06:00", "016-nota.md");
         write(&jsonl, &format!("\u{feff}{first}\n{broken}\n\n{last}\n"));
         let got = list_from(&jsonl, &seen, 50);
-        assert_eq!(got.total, 2, "el BOM, la línea cortada y el blanco no cuentan");
+        assert_eq!(got.total, 2, "the BOM, the cut line and the blank do not count");
         assert_eq!(got.items[0].name, "016-nota.md");
         let _ = fs::remove_file(&jsonl);
     }
@@ -299,7 +299,7 @@ mod tests {
         let got = list_from(&jsonl, &seen, 50);
         assert_eq!(got.unseen, 0);
         assert_eq!(got.total, 2);
-        assert_eq!(got.items.len(), 2, "vistos y todo: la lista no se vacía");
+        assert_eq!(got.items.len(), 2, "seen or not: the list does not empty out");
         let _ = fs::remove_file(&jsonl);
         let _ = fs::remove_file(&seen);
     }
@@ -338,7 +338,7 @@ mod tests {
         let jsonl = temp_path("corrupt-mark");
         let seen = temp_path("corrupt-mark-seen");
         write(&jsonl, &format!("{}\n", line("2026-10-06T16:28:14-06:00", "003-nota.md")));
-        write(&seen, "{ no soy json");
+        write(&seen, "{ not json");
         assert_eq!(list_from(&jsonl, &seen, 50).unseen, 1);
         let _ = fs::remove_file(&jsonl);
         let _ = fs::remove_file(&seen);

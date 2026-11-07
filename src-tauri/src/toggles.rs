@@ -65,7 +65,7 @@ pub struct ToggleSpec {
 #[serde(rename_all = "camelCase")]
 pub struct ProbeInfo {
     pub id: String,
-    /// Shown in the settings picker and in the wire catalog. Spanish, like the
+    /// Shown in the settings picker and in the wire catalog. English, like the
     /// rest of the widget's own copy.
     pub doc: String,
     /// Resolving this probe shells out (`tasklist`) and `get_status` runs on a
@@ -131,7 +131,7 @@ struct RawAction {
 const RAW_PROBES: &[RawProbe] = &[
     RawProbe {
         id: "vault.seal",
-        doc: "OpenBao: abierto (unsealed) o sellado. Ámbar = no responde o sin inicializar.",
+        doc: "OpenBao: open (unsealed) or sealed. Amber = not answering or not initialized.",
         needs_qring: false,
         needs_gha: false,
         on: "vault.unseal",
@@ -140,7 +140,7 @@ const RAW_PROBES: &[RawProbe] = &[
     },
     RawProbe {
         id: "qring.process",
-        doc: "Gateway Q-ring: proceso qringd vivo o parado. Ámbar = falta el pack.",
+        doc: "Q-ring gateway: qringd process alive or stopped. Amber = pack missing.",
         needs_qring: true,
         needs_gha: false,
         on: "qring.on",
@@ -149,7 +149,7 @@ const RAW_PROBES: &[RawProbe] = &[
     },
     RawProbe {
         id: "qring.governance",
-        doc: "Política Q-ring: si los rings pueden correr (y gastar). Este LED es el que pulsa cuando el gateway tiene un Allow esperando.",
+        doc: "Q-ring policy: whether rings may run (and spend). This is the LED that pulses when the gateway has an Allow waiting.",
         needs_qring: true,
         needs_gha: false,
         on: "qring.govern.on",
@@ -158,7 +158,7 @@ const RAW_PROBES: &[RawProbe] = &[
     },
     RawProbe {
         id: "docker.desktop",
-        doc: "Docker Desktop: el motor responde. Ámbar = instalado pero parado (el click lo arranca).",
+        doc: "Docker Desktop: the engine answers. Amber = installed but stopped (a click starts it).",
         needs_qring: false,
         needs_gha: true,
         on: "docker.up",
@@ -167,7 +167,7 @@ const RAW_PROBES: &[RawProbe] = &[
     },
     RawProbe {
         id: "gha.runner",
-        doc: "Runner local de GitHub Actions: Docker Desktop arriba Y el contenedor del runner sano (si no, el job se queda en cola para siempre). Ámbar = falta el runner, está parado o quedó en loop de credencial.",
+        doc: "Local GitHub Actions runner: Docker Desktop up AND the runner container healthy (otherwise the job queues forever). Amber = runner missing, stopped, or stuck in a credential loop.",
         needs_qring: false,
         needs_gha: true,
         on: "gha.up",
@@ -176,7 +176,7 @@ const RAW_PROBES: &[RawProbe] = &[
     },
     RawProbe {
         id: "skills.sync",
-        doc: "Biblioteca de skills: los enlaces del hub (~/.agents/skills) están al día en los 50 agentes. Ámbar = deriva, o falta el sincronizador.",
+        doc: "Skill library: the hub links (~/.agents/skills) are current across all 50 agents. Amber = drift, or the synchronizer is missing.",
         needs_qring: false,
         needs_gha: false,
         on: "skills.sync",
@@ -185,7 +185,7 @@ const RAW_PROBES: &[RawProbe] = &[
     },
     RawProbe {
         id: "skills.watch",
-        doc: "Auto-sincronización: vigilante del hub, re-enlaza solo cuando aparece, se renombra o se borra una skill.",
+        doc: "Auto-sync: a hub watcher that re-links on its own when a skill appears, is renamed or is deleted.",
         needs_qring: false,
         needs_gha: false,
         on: "skills.watch.on",
@@ -194,7 +194,7 @@ const RAW_PROBES: &[RawProbe] = &[
     },
     RawProbe {
         id: "mcp.servers",
-        doc: "Servidores MCP de la lista: encendido cuando están todos vivos Y el túnel declarado de cada uno está conectado. Ámbar = falta el binario de alguno o falta cloudflared. El nombre del servidor, su túnel y su URL salen del panel MCP.",
+        doc: "MCP servers in the list: on when they are all alive AND each declared tunnel is connected. Amber = one is missing its binary, or cloudflared is missing. The server name, its tunnel and its URL come from the MCP panel.",
         needs_qring: false,
         needs_gha: false,
         on: "mcp.on",
@@ -206,92 +206,92 @@ const RAW_PROBES: &[RawProbe] = &[
 const RAW_ACTIONS: &[RawAction] = &[
     RawAction {
         id: "vault.unseal",
-        doc: "Abrir el vault (unseal con las keys del init).",
+        doc: "Open the vault (unseal with the init keys).",
         needs_vault: false,
     },
     RawAction {
         id: "vault.seal",
-        doc: "Sellar el vault: corta a TODOS sus clientes hasta que alguien lo abra.",
+        doc: "Seal the vault: it cuts off ALL its clients until someone opens it.",
         needs_vault: true,
     },
     RawAction {
         id: "qring.on",
-        doc: "Arrancar el gateway Q-ring. No enciende la política: eso es GOV.",
+        doc: "Start the Q-ring gateway. It does not turn the policy on: that is GOV.",
         needs_vault: true,
     },
     RawAction {
         id: "qring.off",
-        doc: "Detener el gateway Q-ring. Apaga también la política: un gateway parado que dice «los rings pueden correr» sería una promesa que nadie puede cumplir.",
+        doc: "Stop the Q-ring gateway. It also turns the policy off: a stopped gateway claiming «rings may run» would be a promise nobody can keep.",
         needs_vault: false,
     },
     RawAction {
         id: "qring.restart",
-        doc: "Reiniciar el gateway Q-ring.",
+        doc: "Restart the Q-ring gateway.",
         needs_vault: true,
     },
     RawAction {
         id: "qring.govern.on",
-        doc: "Permitir que los rings corran. Si el gateway está parado, lo arranca primero (con el vault, como qring.on).",
+        doc: "Let the rings run. If the gateway is stopped it starts it first (vault included, like qring.on).",
         needs_vault: true,
     },
     RawAction {
         id: "qring.govern.off",
-        doc: "Bloquear los rings: no corren, no gastan. Vale con el gateway arriba: es el caso que GOV existe para cubrir.",
+        doc: "Block the rings: they do not run, they do not spend. It holds with the gateway up: that is the case GOV exists to cover.",
         needs_vault: false,
     },
     RawAction {
         id: "skills.sync",
-        doc: "Re-enlazar los agentes desde el hub de skills (no copia archivos). Ambos lados del LED hacen lo mismo: sincronizar.",
+        doc: "Re-link the agents from the skill hub (it copies no files). Both sides of the LED do the same: sync.",
         needs_vault: false,
     },
     RawAction {
         id: "skills.watch.on",
-        doc: "Encender la auto-sincronización: un vigilante del hub que re-enlaza al detectar un cambio.",
+        doc: "Turn auto-sync on: a hub watcher that re-links when it detects a change.",
         needs_vault: false,
     },
     RawAction {
         id: "skills.watch.off",
-        doc: "Apagar la auto-sincronización (el botón manual sigue funcionando).",
+        doc: "Turn auto-sync off (the manual button keeps working).",
         needs_vault: false,
     },
     RawAction {
         id: "mcp.on",
-        doc: "Arrancar todos los servidores MCP de la lista y el túnel nombrado que declare cada fila. Idempotente: lo que ya está vivo no se duplica.",
+        doc: "Start every MCP server in the list and the named tunnel each row declares. Idempotent: what is already alive is not duplicated.",
         needs_vault: true,
     },
     RawAction {
         id: "mcp.off",
-        doc: "Detener los servidores MCP y sus conectores de túnel. Solo mata por pid los que arrancó edgePass; el túnel, por pid con su nombre en la línea de comandos (nunca por imagen).",
+        doc: "Stop the MCP servers and their tunnel connectors. It only kills by pid the ones edgePass started; the tunnel, by pid with its name on the command line (never by image).",
         needs_vault: false,
     },
     RawAction {
         id: "mcp.restart",
-        doc: "Reiniciar todos los servidores MCP y sus túneles (el gesto Ctrl / click derecho del LED).",
+        doc: "Restart every MCP server and its tunnels (the LED's Ctrl / right-click gesture).",
         needs_vault: true,
     },
     RawAction {
         id: "docker.up",
-        doc: "Arrancar Docker Desktop y esperar al motor (hasta 120 s). Idempotente: si ya responde, no hace nada.",
+        doc: "Start Docker Desktop and wait for the engine (up to 120 s). Idempotent: if it already answers, it does nothing.",
         needs_vault: false,
     },
     RawAction {
         id: "gha.up",
-        doc: "Asegurar el runner local: si Docker no responde lo arranca, si falta la imagen la construye, y si el contenedor no existe, está parado o quedó en loop de credencial, lo recrea con un registration token nuevo (gh api).",
+        doc: "Ensure the local runner: if Docker does not answer it starts it, if the image is missing it builds it, and if the container does not exist, is stopped or is stuck in a credential loop, it recreates it with a fresh registration token (gh api).",
         needs_vault: false,
     },
     RawAction {
         id: "gha.down",
-        doc: "Parar el contenedor del runner local. Docker Desktop queda quieto: apagarlo cortaría todos los demás stacks de la máquina.",
+        doc: "Stop the local runner container. Docker Desktop is left alone: shutting it down would cut every other stack on the machine.",
         needs_vault: false,
     },
     RawAction {
         id: "gha.repair",
-        doc: "Recrear el runner aunque parezca sano (si GitHub lo ve offline): borra el contenedor, acuña un token nuevo y lo vuelve a crear.",
+        doc: "Recreate the runner even when it looks healthy (if GitHub sees it offline): it deletes the container, mints a fresh token and creates it again.",
         needs_vault: false,
     },
     RawAction {
         id: "daemoncurier.open",
-        doc: "Abrir DaemonCurier (el HUD de WSL2/sistema): si ya corre, le pide foco por su pipe; si no, lo lanza.",
+        doc: "Open DaemonCurier (the WSL2/system HUD): if it is already running it asks it for focus through its pipe; if not, it launches it.",
         needs_vault: false,
     },
 ];
@@ -368,20 +368,20 @@ fn service_probe(s: &crate::services::ServiceSpec) -> ProbeInfo {
         ServiceProbe::Process {
             image,
             matcher: Some(m),
-        } => format!("proceso {image} con «{m}»"),
+        } => format!("process {image} with «{m}»"),
         ServiceProbe::Process {
             image,
             matcher: None,
-        } => format!("proceso {image}"),
+        } => format!("process {image}"),
         ServiceProbe::Cmd { cmd, .. } => format!(
-            "probe `{}` (0 = on, 2 = off, 3 = ámbar)",
+            "probe `{}` (0 = on, 2 = off, 3 = amber)",
             cmd.first().map(String::as_str).unwrap_or("cmd")
         ),
     };
     ProbeInfo {
         id: s.probe_id(),
         doc: format!(
-            "Servicio propio «{}»: {what}. Lo definiste en services[]; el binario no lo conoce.",
+            "Own service «{}»: {what}. You defined it in services[]; the binary does not know it.",
             s.title()
         ),
         needs_qring: false,
@@ -405,7 +405,7 @@ fn service_action(s: &crate::services::ServiceSpec, side: &str) -> Option<Action
         "on" => s.actions.on.as_ref(),
         _ => s.actions.off.as_ref(),
     }?;
-    let verb = if side == "on" { "encender" } else { "apagar" };
+    let verb = if side == "on" { "Start" } else { "Stop" };
     let what = declared
         .cmd
         .first()
@@ -418,7 +418,7 @@ fn service_action(s: &crate::services::ServiceSpec, side: &str) -> Option<Action
             s.off_action()
         },
         doc: format!(
-            "{verb} «{}» ejecutando `{what}` (la acción {side} que declaró su services[]).",
+            "{verb} «{}» by running `{what}` (the {side} action its services[] declared).",
             s.title()
         ),
         needs_vault: false,
@@ -434,7 +434,7 @@ fn mcp_probe(s: &crate::mcp::McpServer) -> ProbeInfo {
     ProbeInfo {
         id: format!("mcp.{}", s.id),
         doc: format!(
-            "Servidor MCP «{label}»: vivo o parado (y su túnel, si declara uno). Un servidor por LED; el agregado es mcp.servers."
+            "MCP server «{label}»: alive or stopped (and its tunnel, if it declares one). One server per LED; the aggregate is mcp.servers."
         ),
         needs_qring: false,
         needs_gha: false,
@@ -451,9 +451,9 @@ fn mcp_action_info(s: &crate::mcp::McpServer, side: &str) -> ActionInfo {
         s.label.trim()
     };
     let (doc, needs_vault) = match side {
-        "on" => (format!("Arrancar el servidor MCP «{label}» y su túnel declarado."), true),
-        "off" => (format!("Detener el servidor MCP «{label}» y su túnel."), false),
-        _ => (format!("Reiniciar el servidor MCP «{label}» y su túnel."), true),
+        "on" => (format!("Start the MCP server «{label}» and its declared tunnel."), true),
+        "off" => (format!("Stop the MCP server «{label}» and its tunnel."), false),
+        _ => (format!("Restart the MCP server «{label}» and its tunnel."), true),
     };
     ActionInfo {
         id: format!("mcp.{}.{side}", s.id),
@@ -625,7 +625,7 @@ fn action_ids(cfg: &AppConfig) -> String {
 }
 
 /// A fresh install: just the vault LED. The Q-ring pair *and* the local GHA runner
-/// are in the catalog (Ajustes → Toggles), but an install with no Q-ring pack and no
+/// are in the catalog (Settings → Toggles), but an install with no Q-ring pack and no
 /// Docker Desktop should not open with a row of amber lights.
 /// What a *new* install shows: `KV`.
 ///
@@ -725,7 +725,7 @@ fn view(spec: &ToggleSpec, ctx: &ToggleCtx, cat: &Catalog) -> ToggleView {
         warn: true,
         ask: false,
         live: false,
-        detail: format!("probe desconocida: {}", spec.probe),
+        detail: format!("unknown probe: {}", spec.probe),
     });
     // A derived probe (`svc.<id>`) may be read-only: no `on`/`off` declared.
     // Then the light has nothing to click and says so by disabling the button.
@@ -734,13 +734,13 @@ fn view(spec: &ToggleSpec, ctx: &ToggleCtx, cat: &Catalog) -> ToggleView {
     }
     let action = |id: &str| {
         if id.trim().is_empty() {
-            return "solo mirar: este LED no declara acción".to_string();
+            return "watch only: this LED declares no action".to_string();
         }
         cat.actions
             .iter()
             .find(|a| a.id == id)
             .map(|a| a.doc.clone())
-            .unwrap_or_else(|| format!("acción desconocida: {id}"))
+            .unwrap_or_else(|| format!("unknown action: {id}"))
     };
     ToggleView {
         docs: ToggleDocs {
@@ -749,7 +749,7 @@ fn view(spec: &ToggleSpec, ctx: &ToggleCtx, cat: &Catalog) -> ToggleView {
                 .iter()
                 .find(|p| p.id == spec.probe)
                 .map(|p| p.doc.clone())
-                .unwrap_or_else(|| format!("probe desconocida: {}", spec.probe)),
+                .unwrap_or_else(|| format!("unknown probe: {}", spec.probe)),
             on: action(&spec.on),
             off: action(&spec.off),
             alt: spec.alt.as_deref().map(action),
@@ -800,7 +800,7 @@ pub fn probe_state(id: &str, ctx: &ToggleCtx) -> Option<ToggleState> {
                     false,
                     true,
                     false,
-                    "Q-ring sin sonda: no pude leer su estado".to_string(),
+                    "Q-ring with no probe: could not read its state".to_string(),
                 ),
             };
             Some(ToggleState {
@@ -815,11 +815,11 @@ pub fn probe_state(id: &str, ctx: &ToggleCtx) -> Option<ToggleState> {
         }
         "docker.desktop" => {
             let (on, detail) = match ctx.gha.as_ref() {
-                Some(g) if g.docker_up => (true, "Docker Desktop responde".to_string()),
+                Some(g) if g.docker_up => (true, "Docker Desktop answers".to_string()),
                 Some(g) => (false, g.message.clone()),
                 None => (
                     false,
-                    "Docker sin sonda: no pude leer su estado".to_string(),
+                    "Docker with no probe: could not read its state".to_string(),
                 ),
             };
             Some(ToggleState {
@@ -838,7 +838,7 @@ pub fn probe_state(id: &str, ctx: &ToggleCtx) -> Option<ToggleState> {
                 Some(g) => (crate::gha::all_healthy(g), g.message.clone()),
                 None => (
                     false,
-                    "runner sin sonda: no pude leer su estado".to_string(),
+                    "runner with no probe: could not read its state".to_string(),
                 ),
             };
             Some(ToggleState {
@@ -859,45 +859,45 @@ pub fn probe_state(id: &str, ctx: &ToggleCtx) -> Option<ToggleState> {
                 // gateway: with no Q-ring there is nothing to govern.
                 live: ctx.qring.is_some(),
                 detail: if on {
-                    "los rings pueden correr".to_string()
+                    "rings may run".to_string()
                 } else {
-                    "los rings están bloqueados".to_string()
+                    "rings are blocked".to_string()
                 },
             })
         }
         "skills.sync" => {
             let status = crate::skills::status();
-            let sin_script = status
+            let no_script = status
                 .error
                 .as_deref()
-                .map(|e| e.contains("no encontré"))
+                .map(|e| e.contains("not configured") || e.contains("not found at"))
                 .unwrap_or(false);
             Some(ToggleState {
                 on: status.insync,
                 warn: status.error.is_some() || status.drift > 0,
                 ask: false,
-                // Sin script no hay nada que clickear; con él, el botón siempre sirve
-                // (aunque el status todavía no se haya leído).
-                live: !sin_script,
+                // Without the script there is nothing to click; with it, the button always
+                // works (even when the status has not been read yet).
+                live: !no_script,
                 detail: match &status.error {
                     Some(msg) => msg.clone(),
                     None if status.drift > 0 => format!(
-                        "{} enlace(s) por arreglar: {} faltan, {} apuntan mal, {} muertos",
+                        "{} link(s) to fix: {} missing, {} misdirected, {} dead",
                         status.drift, status.faltan, status.mal_apuntados, status.muertos
                     ),
-                    None if status.skills == 0 => "leyendo el hub…".to_string(),
+                    None if status.skills == 0 => "reading the hub…".to_string(),
                     None => format!(
-                        "{} skills en {} tipos · {} agentes{}{}",
+                        "{} skills in {} kinds · {} agents{}{}",
                         status.skills,
                         status.tipos,
                         status.agentes,
                         if status.anidadas > 0 {
-                            format!(" · {} anidadas", status.anidadas)
+                            format!(" · {} nested", status.anidadas)
                         } else {
                             String::new()
                         },
                         if status.omitidos > 0 {
-                            format!(" · {} omitidas (carpeta real)", status.omitidos)
+                            format!(" · {} skipped (real directory)", status.omitidos)
                         } else {
                             String::new()
                         }
@@ -913,9 +913,9 @@ pub fn probe_state(id: &str, ctx: &ToggleCtx) -> Option<ToggleState> {
                 ask: false,
                 live: status.error.is_none(),
                 detail: if status.watching {
-                    "vigilando el hub: re-enlaza solo cada 5 s".to_string()
+                    "watching the hub: re-links on its own every 5 s".to_string()
                 } else {
-                    "apagado: una skill nueva del hub no aparece sola en los agentes".to_string()
+                    "off: a new skill in the hub does not reach the agents on its own".to_string()
                 },
             })
         }
@@ -926,7 +926,7 @@ pub fn probe_state(id: &str, ctx: &ToggleCtx) -> Option<ToggleState> {
                     warn: true,
                     ask: false,
                     live: false,
-                    detail: "MCP sin sonda: no pude leer su estado".to_string(),
+                    detail: "MCP with no probe: could not read its state".to_string(),
                 });
             };
             let sin_config = status.total == 0;
@@ -940,7 +940,7 @@ pub fn probe_state(id: &str, ctx: &ToggleCtx) -> Option<ToggleState> {
                 ask: false,
                 live: !sin_config,
                 detail: if sin_config {
-                    "sin servidores MCP: cargá la lista en el panel MCP".to_string()
+                    "no MCP servers: load the list in the MCP panel".to_string()
                 } else {
                     status.detail.clone()
                 },
@@ -1009,16 +1009,16 @@ pub fn pick_action(spec: &ToggleSpec, dir: &str, current_on: bool) -> Result<Str
         "alt" => spec
             .alt
             .clone()
-            .ok_or_else(|| format!("el toggle '{}' no tiene acción alt", spec.id))?,
+            .ok_or_else(|| format!("toggle '{}' has no alt action", spec.id))?,
         other => {
             return Err(format!(
-                "dirección desconocida: '{other}' (on | off | alt | flip)"
+                "unknown direction: '{other}' (on | off | alt | flip)"
             ))
         }
     };
     if picked.trim().is_empty() {
         return Err(format!(
-            "el toggle '{}' es de solo lectura: su probe no declara acción para '{dir}'",
+            "toggle '{}' is read-only: its probe declares no action for '{dir}'",
             spec.id
         ));
     }
@@ -1056,7 +1056,7 @@ pub async fn fire(
 ) -> Result<ActionOutcome, String> {
     let spec = cfg.toggles.iter().find(|t| t.id == id).ok_or_else(|| {
         format!(
-            "toggle desconocido: '{id}' · hay: {}",
+            "unknown toggle: '{id}' · have: {}",
             cfg.toggles
                 .iter()
                 .map(|t| t.id.as_str())
@@ -1085,12 +1085,12 @@ pub async fn run_action(id: &str, ctx: &ActionCtx<'_>) -> Result<ActionOutcome, 
     // The command is never synthesised here: no killing by image, no guessing.
     if let Some(rest) = id.strip_prefix("svc.") {
         let (sid, side) = rest.rsplit_once('.').ok_or_else(|| {
-            format!("acción de servicio mal formada: '{id}' (esperaba svc.<id>.on|off)")
+            format!("malformed service action: '{id}' (expected svc.<id>.on|off)")
         })?;
         let side = match side {
             "on" => crate::services::Side::On,
             "off" => crate::services::Side::Off,
-            other => return Err(format!("lado desconocido: '{other}' (on | off)")),
+            other => return Err(format!("unknown side: '{other}' (on | off)")),
         };
         let cfg = ctx.cfg.clone();
         let sid = sid.to_string();
@@ -1098,7 +1098,7 @@ pub async fn run_action(id: &str, ctx: &ActionCtx<'_>) -> Result<ActionOutcome, 
             crate::services::run_action(&cfg, &sid, side)
         })
         .await
-        .map_err(|e| format!("servicio task: {e}"))??;
+        .map_err(|e| format!("service task: {e}"))??;
         return Ok(ActionOutcome {
             action: id.into(),
             toast: detail.clone(),
@@ -1123,7 +1123,7 @@ pub async fn run_action(id: &str, ctx: &ActionCtx<'_>) -> Result<ActionOutcome, 
                 None
             };
             let detail = match synced {
-                Some(n) => format!("{} · {n} claves", seal.message),
+                Some(n) => format!("{} · {n} keys", seal.message),
                 None => seal.message.clone(),
             };
             Ok(ActionOutcome {
@@ -1132,7 +1132,7 @@ pub async fn run_action(id: &str, ctx: &ActionCtx<'_>) -> Result<ActionOutcome, 
                 toast: if seal.sealed {
                     seal.message
                 } else {
-                    "Vault abierto".into()
+                    "Vault open".into()
                 },
             })
         }
@@ -1142,7 +1142,7 @@ pub async fn run_action(id: &str, ctx: &ActionCtx<'_>) -> Result<ActionOutcome, 
                 action: id.into(),
                 detail: seal.message.clone(),
                 toast: if seal.sealed {
-                    "Vault cerrado".into()
+                    "Vault closed".into()
                 } else {
                     seal.message
                 },
@@ -1172,18 +1172,18 @@ pub async fn run_action(id: &str, ctx: &ActionCtx<'_>) -> Result<ActionOutcome, 
             })
         }
         "skills.sync" => {
-            // Un sync completo tarda ~1 s (y hasta 5 s si hay que crear 21 mil enlaces):
-            // fuera del runtime async, igual que el CLI de Q-ring.
+            // A full sync takes ~1 s (and up to 5 s if 21 thousand links have to be created):
+            // off the async runtime, like the Q-ring CLI.
             let (report, _status) = tokio::task::spawn_blocking(crate::skills::sync_now)
                 .await
                 .map_err(|e| format!("skills-sync task: {e}"))??;
             let resumen = format!(
-                "+{} enlaces, ~{} arreglados, -{} retirados{}",
+                "+{} links, ~{} fixed, -{} retired{}",
                 report.creados,
                 report.arreglados,
                 report.retirados,
                 if report.omitidos > 0 {
-                    format!(" · {} omitidos", report.omitidos)
+                    format!(" · {} skipped", report.omitidos)
                 } else {
                     String::new()
                 }
@@ -1192,9 +1192,9 @@ pub async fn run_action(id: &str, ctx: &ActionCtx<'_>) -> Result<ActionOutcome, 
                 action: id.into(),
                 detail: resumen.clone(),
                 toast: if report.creados + report.arreglados + report.retirados == 0 {
-                    "Skills ya estaban al día".into()
+                    "Skills were already current".into()
                 } else {
-                    format!("Skills sincronizadas · {resumen}")
+                    format!("Skills synced · {resumen}")
                 },
             })
         }
@@ -1204,7 +1204,7 @@ pub async fn run_action(id: &str, ctx: &ActionCtx<'_>) -> Result<ActionOutcome, 
                 .map_err(|e| format!("skills-sync task: {e}"))??;
             Ok(ActionOutcome {
                 action: id.into(),
-                toast: "Auto-sync encendido".into(),
+                toast: "Auto-sync on".into(),
                 detail,
             })
         }
@@ -1214,7 +1214,7 @@ pub async fn run_action(id: &str, ctx: &ActionCtx<'_>) -> Result<ActionOutcome, 
                 .map_err(|e| format!("skills-sync task: {e}"))??;
             Ok(ActionOutcome {
                 action: id.into(),
-                toast: "Auto-sync apagado".into(),
+                toast: "Auto-sync off".into(),
                 detail,
             })
         }
@@ -1222,7 +1222,7 @@ pub async fn run_action(id: &str, ctx: &ActionCtx<'_>) -> Result<ActionOutcome, 
         "mcp.off" => mcp_action(ctx, "off").await,
         "mcp.restart" => mcp_action(ctx, "restart").await,
         other => Err(format!(
-            "acción desconocida: '{other}' · disponibles: {}",
+            "unknown action: '{other}' · available: {}",
             action_ids(ctx.cfg)
         )),
     }
@@ -1243,9 +1243,9 @@ async fn mcp_action(ctx: &ActionCtx<'_>, action: &'static str) -> Result<ActionO
         secrets = crate::mcp::resolve_all(&cfg, &token).await;
     }
     let verb = match action {
-        "on" => "arrancado",
-        "off" => "detenido",
-        _ => "reiniciado",
+        "on" => "started",
+        "off" => "stopped",
+        _ => "restarted",
     };
     // Spawning and `tasklist` are blocking; keep them off the async runtime,
     // like the Q-ring CLI and the skills sync.
@@ -1267,7 +1267,7 @@ async fn mcp_action(ctx: &ActionCtx<'_>, action: &'static str) -> Result<ActionO
 /// when this row declares `secretEnv`, and never for `off`.
 async fn mcp_one_action(ctx: &ActionCtx<'_>, id: &str, side: &str) -> Result<ActionOutcome, String> {
     if !matches!(side, "on" | "off" | "restart") {
-        return Err(format!("lado MCP desconocido: '{side}' (on | off | restart)"));
+        return Err(format!("unknown MCP side: '{side}' (on | off | restart)"));
     }
     let mut cfg = ctx.cfg.clone();
     let mut secrets = crate::mcp::Secrets::new();
@@ -1293,9 +1293,9 @@ async fn mcp_one_action(ctx: &ActionCtx<'_>, id: &str, side: &str) -> Result<Act
     .await
     .map_err(|e| format!("mcp task: {e}"))??;
     let verb = match side {
-        "on" => "arrancado",
-        "off" => "detenido",
-        _ => "reiniciado",
+        "on" => "started",
+        "off" => "stopped",
+        _ => "restarted",
     };
     Ok(ActionOutcome {
         action: format!("mcp.{id}.{side}"),
@@ -1319,7 +1319,7 @@ async fn qring_action(ctx: &ActionCtx<'_>, action: &'static str) -> Result<Actio
     let verb = match action {
         "on" => "on",
         "off" => "off",
-        _ => "reiniciado",
+        _ => "restarted",
     };
     Ok(ActionOutcome {
         action: format!("qring.{action}"),
@@ -1329,7 +1329,7 @@ async fn qring_action(ctx: &ActionCtx<'_>, action: &'static str) -> Result<Actio
 }
 
 /// Turning the policy ON is a claim about the gateway: with `qringd` down the LED
-/// would say "los rings pueden correr" while nothing can run, so the click starts it
+/// would say "rings may run" while nothing can run, so the click starts it
 /// first — the same path `qring.on` takes, vault included — and only then writes the
 /// policy. A start that fails fails the whole action: enabling a policy on top of no
 /// gateway is exactly the lie this coupling exists to remove.
@@ -1360,9 +1360,9 @@ fn govern(cfg: &AppConfig, enabled: bool, started: Option<&str>) -> Result<Actio
     next.qring_governed = enabled;
     crate::config::save_config(&next)?;
     let policy = if enabled {
-        "los rings pueden correr"
+        "rings may run"
     } else {
-        "los rings están bloqueados"
+        "rings are blocked"
     };
     Ok(ActionOutcome {
         action: if enabled {
@@ -1375,11 +1375,11 @@ fn govern(cfg: &AppConfig, enabled: bool, started: Option<&str>) -> Result<Actio
             None => policy.to_string(),
         },
         toast: if !enabled {
-            "Q-ring gobernado OFF · nada corre, nada se gasta".into()
+            "Q-ring governed OFF · nothing runs, nothing is spent".into()
         } else if started.is_some() {
-            format!("Q-ring arrancado y gobernado ON · {policy}")
+            format!("Q-ring started and governed ON · {policy}")
         } else {
-            format!("Q-ring gobernado ON · {policy}")
+            format!("Q-ring governed ON · {policy}")
         },
     })
 }
@@ -1423,7 +1423,7 @@ async fn gha_action(ctx: &ActionCtx<'_>, act: GhaAct) -> Result<ActionOutcome, S
 
     let detail = tokio::task::spawn_blocking(move || match act {
         GhaAct::Docker => crate::gha::ensure_docker(&cfg)
-            .map(|said| said.unwrap_or_else(|| "Docker Desktop ya estaba arriba".into())),
+            .map(|said| said.unwrap_or_else(|| "Docker Desktop was already up".into())),
         GhaAct::Up => crate::gha::ensure(&cfg, None, &secrets),
         GhaAct::Down => crate::gha::stop(&cfg, None),
         GhaAct::Repair => crate::gha::repair(&cfg, &secrets),
@@ -1445,7 +1445,7 @@ async fn gha_action(ctx: &ActionCtx<'_>, act: GhaAct) -> Result<ActionOutcome, S
 pub fn validate(cfg: &AppConfig, specs: Vec<ToggleSpec>) -> Result<Vec<ToggleSpec>, String> {
     if specs.len() > MAX_TOGGLES {
         return Err(format!(
-            "máximo {MAX_TOGGLES} toggles (llegaron {})",
+            "at most {MAX_TOGGLES} toggles (got {})",
             specs.len()
         ));
     }
@@ -1462,17 +1462,17 @@ pub fn validate(cfg: &AppConfig, specs: Vec<ToggleSpec>) -> Result<Vec<ToggleSpe
             .filter(|a| !a.is_empty());
 
         if spec.label.is_empty() {
-            return Err(format!("un toggle necesita label (1-{MAX_LABEL_CHARS} caracteres)"));
+            return Err(format!("a toggle needs a label (1-{MAX_LABEL_CHARS} characters)"));
         }
         if spec.label.chars().count() > MAX_LABEL_CHARS {
             return Err(format!(
-                "label '{}' tiene más de {MAX_LABEL_CHARS} caracteres",
+                "label '{}' is longer than {MAX_LABEL_CHARS} characters",
                 spec.label
             ));
         }
         if !is_known_probe(cfg, &spec.probe) {
             return Err(format!(
-                "probe desconocida: '{}' · disponibles: {}",
+                "unknown probe: '{}' · available: {}",
                 spec.probe,
                 probe_ids(cfg)
             ));
@@ -1485,7 +1485,7 @@ pub fn validate(cfg: &AppConfig, specs: Vec<ToggleSpec>) -> Result<Vec<ToggleSpe
             }
             if !is_known_action(cfg, id) {
                 return Err(format!(
-                    "acción {side} desconocida: '{id}' · disponibles: {}",
+                    "unknown {side} action: '{id}' · available: {}",
                     action_ids(cfg)
                 ));
             }
@@ -1493,7 +1493,7 @@ pub fn validate(cfg: &AppConfig, specs: Vec<ToggleSpec>) -> Result<Vec<ToggleSpe
         if let Some(alt) = &spec.alt {
             if !is_known_action(cfg, alt) {
                 return Err(format!(
-                    "acción alt desconocida: '{alt}' · disponibles: {}",
+                    "unknown alt action: '{alt}' · available: {}",
                     action_ids(cfg)
                 ));
             }
@@ -1562,7 +1562,7 @@ mod tests {
             progress: 0,
             threshold: 3,
             version: None,
-            message: "sonda".into(),
+            message: "probe".into(),
         }
     }
 
@@ -1573,7 +1573,7 @@ mod tests {
             host: "C:\\pack\\..".into(),
             pack_ok,
             pid: None,
-            message: "sonda".into(),
+            message: "probe".into(),
             governed: true,
         }
     }
@@ -1615,8 +1615,8 @@ mod tests {
     fn catalog_ids_are_unique_and_documented() {
         let cfg = AppConfig::default();
         for probe in builtin_probes() {
-            assert!(is_known_probe(&cfg, &probe.id), "{} falta", probe.id);
-            assert!(!probe.doc.is_empty(), "{} sin doc", probe.id);
+            assert!(is_known_probe(&cfg, &probe.id), "{} missing", probe.id);
+            assert!(!probe.doc.is_empty(), "{} has no doc", probe.id);
             assert!(is_known_action(&cfg, &probe.on), "{} on", probe.id);
             assert!(is_known_action(&cfg, &probe.off), "{} off", probe.id);
             if let Some(alt) = probe.alt {
@@ -1624,19 +1624,19 @@ mod tests {
             }
         }
         for action in builtin_actions() {
-            assert!(!action.doc.is_empty(), "{} sin doc", action.id);
+            assert!(!action.doc.is_empty(), "{} has no doc", action.id);
         }
         let mut ids: Vec<String> = builtin_probes().into_iter().map(|p| p.id).collect();
         ids.sort_unstable();
         let before = ids.len();
         ids.dedup();
-        assert_eq!(before, ids.len(), "probe repetida");
+        assert_eq!(before, ids.len(), "duplicate probe");
 
         let mut acts: Vec<String> = builtin_actions().into_iter().map(|a| a.id).collect();
         acts.sort_unstable();
         let before = acts.len();
         acts.dedup();
-        assert_eq!(before, acts.len(), "acción repetida");
+        assert_eq!(before, acts.len(), "duplicate action");
     }
 
     #[test]
@@ -1655,14 +1655,14 @@ mod tests {
             };
             assert!(
                 probe_state(&probe.id, &ctx).is_some(),
-                "{} no resuelve",
+                "{} does not resolve",
                 probe.id
             );
         }
         for action in builtin_actions() {
             assert!(
                 is_known_action(&cfg, &action.id),
-                "{} no es conocida",
+                "{} is not known",
                 action.id
             );
         }
@@ -1695,11 +1695,11 @@ mod tests {
         assert!(cat.actions.iter().any(|a| a.id == "svc.mi-api.on"));
         assert!(
             !cat.actions.iter().any(|a| a.id == "svc.mi-api.off"),
-            "sin acción off declarada no se publica una"
+            "no declared off action means none is published"
         );
         let probe = cat.probes.iter().find(|p| p.id == "svc.mi-api").unwrap();
         assert_eq!(probe.on, "svc.mi-api.on");
-        assert!(probe.off.is_empty(), "un LED de solo lectura no inventa off");
+        assert!(probe.off.is_empty(), "a read-only LED does not invent an off");
 
         // …and `validate` accepts the derived ids without the table changing.
         let spec = ToggleSpec {
@@ -1793,7 +1793,7 @@ mod tests {
         assert_eq!(out[0].label, "KV");
         assert_eq!(out[0].id, "kv");
         assert_eq!(out[1].id, "kv-2");
-        assert_eq!(out[0].alt, None, "un alt vacío no es una acción");
+        assert_eq!(out[0].alt, None, "an empty alt is not an action");
     }
 
     #[test]
@@ -1821,7 +1821,7 @@ mod tests {
         assert_eq!(pick_action(&spec, "on", true).unwrap(), "qring.on");
         assert_eq!(pick_action(&spec, "alt", false).unwrap(), "qring.restart");
         assert!(pick_action(&kv(), "alt", false).is_err());
-        assert!(pick_action(&kv(), "lado", false).is_err());
+        assert!(pick_action(&kv(), "side", false).is_err());
     }
 
     #[test]
@@ -1835,7 +1835,7 @@ mod tests {
         let qr = qr();
         assert_eq!(qr.id, "qr");
         assert_eq!(qr.probe, "qring.process");
-        // El proceso del Q-ring ya no comparte LED con Docker: se fue con su gesto.
+        // The Q-ring process no longer shares a LED with Docker: it left with its gesture.
         assert_eq!(pick_action(&qr, "alt", false).unwrap(), "qring.restart");
     }
 
@@ -1853,7 +1853,7 @@ mod tests {
         assert!(uninitialized.warn);
 
         let offline = probe_state("vault.seal", &ctx(&cfg, &seal(false, true, true))).unwrap();
-        assert!(offline.warn && !offline.live, "sin respuesta no hay click");
+        assert!(offline.warn && !offline.live, "no answer, no click");
     }
 
     #[test]
@@ -1873,8 +1873,8 @@ mod tests {
         assert!(!process.on && process.warn && !process.live);
 
         let govern = probe_state("qring.governance", &ctx).unwrap();
-        assert!(govern.on, "la política vive en la config");
-        assert!(!govern.live, "sin gateway no hay nada que gobernar");
+        assert!(govern.on, "the policy lives in the config");
+        assert!(!govern.live, "with no gateway there is nothing to govern");
     }
 
     #[test]
@@ -1890,9 +1890,9 @@ mod tests {
         assert!(views[0].docs.alt.is_none());
         // The Allow pulses on the *policy* LED: `GW` is process control only, so a
         // machine that dropped `GOV` keeps the Allow chip as its only prompt.
-        assert!(!views[1].state.ask, "GW ya no lleva el pulso de Allow");
-        assert!(views[1].docs.alt.as_deref().unwrap().contains("Reiniciar"));
-        assert!(views[2].state.ask, "GOV lleva el Allow pendiente");
+        assert!(!views[1].state.ask, "GW no longer carries the Allow pulse");
+        assert!(views[1].docs.alt.as_deref().unwrap().contains("Restart"));
+        assert!(views[2].state.ask, "GOV carries the pending Allow");
     }
 
     #[test]
@@ -1906,12 +1906,12 @@ mod tests {
             .filter(|v| v.state.ask)
             .map(|v| v.spec.id.as_str())
             .collect();
-        assert_eq!(pulse, vec!["gov"], "un solo LED pide, y es el de política");
+        assert_eq!(pulse, vec!["gov"], "only one LED asks, and it is the policy one");
 
         let quiet = views(&cfg, &seal, false);
         assert!(
             quiet.iter().all(|v| !v.state.ask),
-            "sin Allow, ningún LED pulsa"
+            "with no Allow, no LED pulses"
         );
     }
 

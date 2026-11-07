@@ -314,7 +314,7 @@ pub fn spawn(state: Arc<AppState>, app: AppHandle) {
                         // a leftover handle from a process that is going away.
                         // Say what it means, at the level it deserves.
                         crate::log_info!(
-                            "ipc: el primer nombre del pipe ya existe ({e}); sigo como instancia adicional de sesión"
+                            "ipc: the first pipe name already exists ({e}); continuing as an extra session instance"
                         );
                         create_pipe_instance(PIPE_NAME, false, security.as_mut())
                     }
@@ -324,7 +324,7 @@ pub fn spawn(state: Arc<AppState>, app: AppHandle) {
             let mut server = match created {
                 Ok(s) => s,
                 Err(e) => {
-                    crate::log_error!("ipc: no pude crear el pipe: {e}");
+                    crate::log_error!("ipc: could not create the pipe: {e}");
                     tokio::time::sleep(Duration::from_secs(2)).await;
                     continue;
                 }
@@ -336,7 +336,7 @@ pub fn spawn(state: Arc<AppState>, app: AppHandle) {
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
                 if let Err(e) = session(&mut server, st, app).await {
-                    crate::log_warn!("ipc: sesión terminada: {e}");
+                    crate::log_warn!("ipc: session ended: {e}");
                 }
             });
         }
@@ -365,14 +365,14 @@ async fn session(
                 let op = v
                     .get("op")
                     .and_then(Value::as_str)
-                    .unwrap_or("(sin op)")
+                    .unwrap_or("(no op)")
                     .to_string();
                 let reply = dispatch(v, state.clone(), &app).await;
                 let ok = reply.get("ok").and_then(Value::as_bool).unwrap_or(false);
                 crate::log_info!("ipc: op={op} ok={ok}");
                 reply
             }
-            Err(e) => json!({ "ok": false, "error": format!("json invalido: {e}") }),
+            Err(e) => json!({ "ok": false, "error": format!("invalid json: {e}") }),
         };
         let mut payload = reply.to_string();
         payload.push('\n');
@@ -409,10 +409,10 @@ async fn dispatch(req: Value, state: Arc<AppState>, app: &AppHandle) -> Value {
             },
             Err(e) => json!({ "ok": false, "error": e }),
         },
-        // El runner local de GHA: leer su estado (`{"op":"gha"}`) o su log
-        // (`{"op":"gha-logs","id":"mi-app","tail":200,"source":"lifecycle|worker|both"}`).
-        // El log es lo que un agente recupera para explicar un fallo sin abrir el widget, y
-        // lo que muestra el visor que el LED abre solo.
+        // The local GHA runner: read its state (`{"op":"gha"}`) or its log
+        // (`{"op":"gha-logs","id":"my-app","tail":200,"source":"lifecycle|worker|both"}`).
+        // The log is what an agent recovers to explain a failure without opening the widget,
+        // and what the viewer shows when the LED opens it on its own.
         "gha" => match load_config() {
             Ok(cfg) => {
                 let st = crate::gha::status(&cfg);
@@ -479,8 +479,8 @@ async fn dispatch(req: Value, state: Arc<AppState>, app: &AppHandle) -> Value {
             Err(e) => json!({ "ok": false, "error": e }),
         },
 
-        // Las skills de la máquina: `{"op":"skills"}` lee (`"sync": true` re-enlaza).
-        // Es la puerta para scripts y agentes; mismo motor que el LED SYNC.
+        // The machine's skills: `{"op":"skills"}` reads (`"sync": true` re-links).
+        // It is the door for scripts and agents; same engine as the SYNC LED.
         "skills" => match req.get("sync").and_then(Value::as_bool).unwrap_or(false) {
             true => match tokio::task::spawn_blocking(crate::skills::sync_now).await {
                 Ok(Ok((report, status))) => json!({ "ok": true, "sync": report, "skills": status }),
@@ -509,7 +509,7 @@ async fn dispatch(req: Value, state: Arc<AppState>, app: &AppHandle) -> Value {
                     Ok(s) => json!({ "ok": true, "sealed": s.sealed }),
                     Err(e) => json!({ "ok": false, "error": e }),
                 },
-                Ok(None) => json!({ "ok": false, "error": "sin token cargado" }),
+                Ok(None) => json!({ "ok": false, "error": "no token loaded" }),
                 Err(e) => json!({ "ok": false, "error": e }),
             },
             Err(e) => json!({ "ok": false, "error": e }),
@@ -533,7 +533,7 @@ async fn dispatch(req: Value, state: Arc<AppState>, app: &AppHandle) -> Value {
         "search" => search(&req, &state),
         "meter" => meter_form(&req, &state, app),
         // The `↻` button, reachable from an agent. The docs told callers to use
-        // `sync_index` while this dispatch answered "op desconocida": now the
+        // `sync_index` while this dispatch answered "unknown op": now the
         // documented flow (`search` came up empty → reindex → `search` again)
         // works without opening the UI.
         "sync_index" => match sync_index_inner(&state).await {
@@ -544,15 +544,15 @@ async fn dispatch(req: Value, state: Arc<AppState>, app: &AppHandle) -> Value {
             Err(e) => json!({ "ok": false, "error": e }),
         },
         "ingest-form" => ingest_form(req, &state, app),
-        // Notas del secreto: leerlas y escribirlas por el pipe es lo que permite
-        // que el agente deje *por qué* pidió un valor, al lado del path.
+        // Secret notes: reading and writing them over the pipe is what lets the
+        // agent leave *why* it asked for a value, next to the path.
         "notes" => notes_op(&req, &state),
         "note" => note_op(&req, &state),
         "toggles" => toggles_op(&req, &state).await,
         "toggle" => toggle_op(&req, &state).await,
-        // Los servicios del dueño: `{"op":"services"}` lee, `{"op":"services","set":[…]}`
-        // reemplaza. Es el punto de extensión que permite que un LLM agregue un LED
-        // sin tocar el binario.
+        // The owner's services: `{"op":"services"}` reads, `{"op":"services","set":[…]}`
+        // replaces. It is the extension point that lets an LLM add an LED
+        // without touching the binary.
         "services" => services_op(&req).await,
         "request" => request_op(req, state, app).await,
         "request-wait" => request_wait(&req, &state).await,
@@ -562,17 +562,17 @@ async fn dispatch(req: Value, state: Arc<AppState>, app: &AppHandle) -> Value {
             Err(e) => json!({ "ok": false, "error": e }),
         },
 
-        other => json!({ "ok": false, "error": format!("op desconocida: {other}") }),
+        other => json!({ "ok": false, "error": format!("unknown op: {other}") }),
     }
 }
 
-/// `{"op":"notes","namespace":"","path":"personal/x","key":"GATE"}` — las notas
-/// del path (o del campo), de la más nueva a la más vieja.
+/// `{"op":"notes","namespace":"","path":"personal/x","key":"GATE"}` — the notes
+/// for the path (or the field), newest first.
 ///
-/// Son comentarios **locales**: `(namespace, path, key)` enlaza la nota con el
-/// secreto, pero el valor nunca pasa por acá. OpenBao no guarda comentarios (y en
-/// KV v1 ni existe la metadata), así que esta es la mitad que el vault no puede
-/// tener.
+/// They are **local** comments: `(namespace, path, key)` ties the note to the
+/// secret, but the value never passes through here. OpenBao keeps no comments (and
+/// in KV v1 the metadata does not even exist), so this is the half the vault cannot
+/// have.
 fn notes_op(req: &Value, state: &AppState) -> Value {
     let namespace = req
         .get("namespace")
@@ -581,7 +581,7 @@ fn notes_op(req: &Value, state: &AppState) -> Value {
         .to_string();
     let path = req.get("path").and_then(Value::as_str).unwrap_or_default();
     if path.trim().is_empty() {
-        return json!({ "ok": false, "error": "falta 'path'" });
+        return json!({ "ok": false, "error": "missing 'path'" });
     }
     let key = req.get("key").and_then(Value::as_str).map(|s| s.to_string());
     let limit = req
@@ -601,8 +601,8 @@ fn notes_op(req: &Value, state: &AppState) -> Value {
     }
 }
 
-/// `{"op":"note","path":"personal/x","body":"pedido para el túnel","actor":"gemini"}`
-/// — deja una nota escrita por el agente al lado del secreto.
+/// `{"op":"note","path":"personal/x","body":"requested for the tunnel","actor":"gemini"}`
+/// — leaves a note written by the agent next to the secret.
 fn note_op(req: &Value, state: &AppState) -> Value {
     let namespace = req
         .get("namespace")
@@ -612,7 +612,7 @@ fn note_op(req: &Value, state: &AppState) -> Value {
     let path = req.get("path").and_then(Value::as_str).unwrap_or_default();
     let body = req.get("body").and_then(Value::as_str).unwrap_or_default();
     if path.trim().is_empty() || body.trim().is_empty() {
-        return json!({ "ok": false, "error": "faltan 'path' y/o 'body'" });
+        return json!({ "ok": false, "error": "missing 'path' and/or 'body'" });
     }
     let key = req
         .get("key")
@@ -669,8 +669,8 @@ fn search(req: &Value, state: &AppState) -> Value {
                 "key": h.key,
                 "useCount": h.use_count,
                 "lastUsedAt": h.last_used_at,
-                // Cuántas notas tiene el path: el agente puede ver de un vistazo
-                // que ese secreto ya tiene historia (y leerla con `{"op":"notes"}`).
+                // How many notes the path has: the agent can see at a glance
+                // that this secret already has history (and read it with `{"op":"notes"}`).
                 "notes": h.notes,
             })
         })
@@ -741,7 +741,7 @@ fn parse_meter_address(req: &Value) -> Result<MeterAddress, String> {
         .trim()
         .to_string();
     if query.is_empty() {
-        return Err("meter necesita 'path' (+ 'namespace') o bien 'query'".into());
+        return Err("meter needs 'path' (+ 'namespace') or 'query'".into());
     }
     let limit = req
         .get("limit")
@@ -770,7 +770,7 @@ fn path_from_hits(hits: &[SearchHit]) -> Result<(String, String), Value> {
     if hits.is_empty() {
         return Err(json!({
             "ok": false,
-            "error": "sin coincidencias en el índice local (puede estar viejo: prueba sync_index)",
+            "error": "no matches in the local index (it may be stale: try sync_index)",
         }));
     }
     let namespace = hits[0].namespace.clone();
@@ -794,7 +794,7 @@ fn path_from_hits(hits: &[SearchHit]) -> Result<(String, String), Value> {
         return Err(json!({
             "ok": false,
             "error": format!(
-                "ambiguo: {} resultados en {} paths distintos; repite con 'path'",
+                "ambiguous: {} results across {} different paths; retry with 'path'",
                 hits.len(),
                 distinct_paths(hits)
             ),
@@ -814,7 +814,7 @@ fn focus(app: &AppHandle) -> Value {
             let _ = win.set_focus();
             json!({ "ok": true, "focused": true })
         }
-        None => json!({ "ok": false, "error": "ventana main no encontrada" }),
+        None => json!({ "ok": false, "error": "main window not found" }),
     }
 }
 
@@ -858,7 +858,7 @@ fn ingest_form(req: Value, state: &AppState, app: &AppHandle) -> Value {
         .trim_matches('/')
         .to_string();
     if path.is_empty() {
-        return json!({ "ok": false, "error": "falta 'path'" });
+        return json!({ "ok": false, "error": "missing 'path'" });
     }
 
     let mut keys: Vec<String> = Vec::new();
@@ -878,7 +878,7 @@ fn ingest_form(req: Value, state: &AppState, app: &AppHandle) -> Value {
         }
     }
     if keys.is_empty() {
-        return json!({ "ok": false, "error": "faltan 'keys' (nombres de variables)" });
+        return json!({ "ok": false, "error": "missing 'keys' (variable names)" });
     }
 
     let title = req
@@ -912,7 +912,7 @@ fn ingest_form(req: Value, state: &AppState, app: &AppHandle) -> Value {
 /// `{"op":"meter","query":"deploy"}` or
 /// `{"op":"meter","namespace":"infra","path":"projects/demo/web"}`..
 ///
-/// This is the whole "muéstrame los datos de X" flow, and the reason it opens a
+/// This is the whole "show me the data for X" flow, and the reason it opens a
 /// *panel* instead of answering: the values are read by the widget with its own
 /// token and shown to the human there, so they never cross the pipe and the
 /// caller (an agent) has nothing to paste into a chat, a log or a commit. It is
@@ -958,7 +958,7 @@ fn meter_form(req: &Value, state: &AppState, app: &AppHandle) -> Value {
     // Names and the path only: the widget is about to show the values, and this
     // reply is read by an agent that must not end up holding them.
     crate::log_info!(
-        "meter: abro {}/{} en el widget (valores solo en pantalla)",
+        "meter: opening {}/{} in the widget (values on screen only)",
         display_namespace(&namespace),
         path
     );
@@ -1035,7 +1035,7 @@ async fn request_op(req: Value, state: Arc<AppState>, app: &AppHandle) -> Value 
 async fn request_wait(req: &Value, state: &AppState) -> Value {
     let id = req_id(req);
     if id.is_empty() {
-        return json!({ "ok": false, "error": "falta 'id'" });
+        return json!({ "ok": false, "error": "missing 'id'" });
     }
     let timeout = req
         .get("timeoutSecs")
@@ -1080,7 +1080,7 @@ pub async fn apply_decision(
 ) -> Result<Value, String> {
     let id = id.trim();
     if id.is_empty() {
-        return Err("falta 'id'".into());
+        return Err("missing 'id'".into());
     }
     let decision = decision.trim().to_ascii_lowercase();
     match decision.as_str() {
@@ -1108,7 +1108,7 @@ pub async fn apply_decision(
                 .public_json(id)
                 .unwrap_or_else(|| json!({ "ok": true, "status": "running", "requestId": id })))
         }
-        other => Err(format!("decision desconocida: {other}")),
+        other => Err(format!("unknown decision: {other}")),
     }
 }
 
@@ -1134,7 +1134,7 @@ async fn run(req: Value, state: &AppState) -> Value {
         })
         .unwrap_or_default();
     if cmd.is_empty() {
-        return json!({ "ok": false, "error": "falta 'cmd' (array: [programa, args…])" });
+        return json!({ "ok": false, "error": "missing 'cmd' (array: [program, args…])" });
     }
 
     let entries = req
@@ -1143,7 +1143,7 @@ async fn run(req: Value, state: &AppState) -> Value {
         .cloned()
         .unwrap_or_default();
     if entries.is_empty() {
-        return json!({ "ok": false, "error": "faltan 'entries'" });
+        return json!({ "ok": false, "error": "missing 'entries'" });
     }
 
     let allow: Vec<String> = req
@@ -1178,7 +1178,7 @@ async fn run(req: Value, state: &AppState) -> Value {
                 return json!({
                     "ok": false,
                     "sealed": true,
-                    "error": "OpenBao sellado (auto-unseal desactivado)",
+                    "error": "OpenBao sealed (auto-unseal disabled)",
                 });
             }
         }
@@ -1213,14 +1213,14 @@ async fn run(req: Value, state: &AppState) -> Value {
             .trim()
             .to_string();
         if path.is_empty() {
-            return json!({ "ok": false, "error": "entry sin 'path'" });
+            return json!({ "ok": false, "error": "entry without 'path'" });
         }
         match read_secret_map(&cfg, &token, &namespace, &path).await {
             Ok(map) => {
-                // Nota autogenerada del acceso: quién pidió el secreto y para qué
-                // comando. Es lo que el founder quiere poder leer después —
-                // "¿por qué se leyó esto?"— sin que el vault tenga que guardar
-                // comentarios.
+                // Auto-generated note of the access: who asked for the secret and for
+                // which command. It is what the founder wants to be able to read later —
+                // "why was this read?" — without the vault having to store
+                // comments.
                 {
                     let used: Vec<String> = map
                         .keys()
@@ -1233,7 +1233,7 @@ async fn run(req: Value, state: &AppState) -> Value {
                         &path,
                         "",
                         &format!(
-                            "pedido para `{}`{}",
+                            "requested for `{}`{}",
                             cmd.first().cloned().unwrap_or_default(),
                             if used.is_empty() {
                                 String::new()
@@ -1268,7 +1268,7 @@ async fn run(req: Value, state: &AppState) -> Value {
 
     let env = apply_env_map(&vault_pairs, &env_map);
     if env.is_empty() {
-        return json!({ "ok": false, "error": "no hay variables que inyectar" });
+        return json!({ "ok": false, "error": "no variables to inject" });
     }
 
     let injected: Vec<String> = env.iter().map(|(k, _)| k.clone()).collect();
@@ -1281,7 +1281,7 @@ async fn run(req: Value, state: &AppState) -> Value {
     }
 
     crate::log_info!(
-        "run: {} ({} vars inyectadas al entorno del hijo, timeout {}s)",
+        "run: {} ({} vars injected into the child environment, timeout {}s)",
         program,
         injected.len(),
         timeout_secs
@@ -1306,13 +1306,13 @@ async fn run(req: Value, state: &AppState) -> Value {
             let stderr = clip(&out.stderr, MAX_OUTPUT_BYTES);
             if out.timed_out {
                 crate::log_warn!(
-                    "run: {program} excedió {timeout_secs}s; mato el árbol de procesos"
+                    "run: {program} exceeded {timeout_secs}s; killing the process tree"
                 );
                 return json!({
                     "ok": false,
                     "timeout": true,
                     "timeoutSecs": timeout_secs,
-                    "error": format!("timeout tras {timeout_secs}s: proceso terminado"),
+                    "error": format!("timeout after {timeout_secs}s: process terminated"),
                     "code": Value::Null,
                     "env": injected,
                     "stdout": stdout,
@@ -1338,7 +1338,7 @@ async fn run(req: Value, state: &AppState) -> Value {
             })
         }
         Ok(Err(e)) => json!({ "ok": false, "error": e }),
-        Err(e) => json!({ "ok": false, "error": format!("fallo al esperar al hijo: {e}") }),
+        Err(e) => json!({ "ok": false, "error": format!("failed waiting for the child: {e}") }),
     }
 }
 
@@ -1461,7 +1461,7 @@ fn run_status(req: &Value, state: &AppState) -> Value {
         .unwrap_or("")
         .trim();
     if run_id.is_empty() {
-        return json!({ "ok": false, "error": "falta 'runId'" });
+        return json!({ "ok": false, "error": "missing 'runId'" });
     }
     let include_output = req
         .get("includeOutput")
@@ -1486,7 +1486,7 @@ async fn run_wait(req: &Value, state: &AppState) -> Value {
         .trim()
         .to_string();
     if run_id.is_empty() {
-        return json!({ "ok": false, "error": "falta 'runId'" });
+        return json!({ "ok": false, "error": "missing 'runId'" });
     }
     let wait_secs = req
         .get("timeoutSecs")
@@ -1538,7 +1538,7 @@ fn run_cancel(req: &Value, state: &AppState) -> Value {
         .unwrap_or("")
         .trim();
     if run_id.is_empty() {
-        return json!({ "ok": false, "error": "falta 'runId'" });
+        return json!({ "ok": false, "error": "missing 'runId'" });
     }
     let Some(slot) = state.runs.get(run_id) else {
         return json!({
@@ -1727,7 +1727,7 @@ fn spawn_child_process(
         cmd.current_dir(dir);
     }
     cmd.spawn()
-        .map_err(|e| format!("no pude ejecutar {program}: {e}"))
+        .map_err(|e| format!("could not execute {program}: {e}"))
 }
 
 /// Spawn `program`, feed it `env`, and give it `timeout` to finish.
@@ -1785,7 +1785,7 @@ fn wait_child(
             }
             Err(e) => {
                 kill_tree(child);
-                return Err(format!("fallo al esperar al hijo: {e}"));
+                return Err(format!("failed waiting for the child: {e}"));
             }
         }
     };
@@ -1915,7 +1915,7 @@ fn clip(bytes: &[u8], max: usize) -> String {
     while cut > 0 && !text.is_char_boundary(cut) {
         cut -= 1;
     }
-    format!("{}…[recortado]", &text[..cut])
+    format!("{}…[truncated]", &text[..cut])
 }
 
 /// `{"op":"toggles"}` — the header LEDs as data, plus the vocabulary that makes
@@ -1936,7 +1936,7 @@ async fn toggles_op(req: &Value, state: &AppState) -> Value {
         Err(e) => {
             return json!({
                 "ok": false,
-                "error": format!("toggles inválidos: {e}"),
+                "error": format!("invalid toggles: {e}"),
                 "catalog": crate::toggles::catalog(&cfg),
             })
         }
@@ -1996,7 +1996,7 @@ async fn toggle_op(req: &Value, state: &AppState) -> Value {
     if id.is_empty() {
         return json!({
             "ok": false,
-            "error": "falta id (qué LED disparar)",
+            "error": "missing id (which LED to fire)",
             "ids": cfg.toggles.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(),
         });
     }
@@ -2020,8 +2020,8 @@ async fn toggle_op(req: &Value, state: &AppState) -> Value {
 /// instead of guessing. `{"op":"services","set":[…]}` replaces the whole list,
 /// validated exactly like `{"op":"toggles","set":[…]}`.
 ///
-/// Removing a service does **not** remove its LED: the LED then says "probe
-/// desconocida" (amber) and the caller decides. Silently editing two lists from
+/// Removing a service does **not** remove its LED: the LED then says "unknown
+/// probe" (amber) and the caller decides. Silently editing two lists from
 /// one call is how a header loses a light nobody meant to drop.
 async fn services_op(req: &Value) -> Value {
     let cfg = match load_config() {
@@ -2036,7 +2036,7 @@ async fn services_op(req: &Value) -> Value {
         Err(e) => {
             return json!({
                 "ok": false,
-                "error": format!("services inválidos: {e}"),
+                "error": format!("invalid services: {e}"),
                 "catalog": crate::toggles::catalog(&cfg),
             })
         }
@@ -2091,7 +2091,7 @@ fn services_reply(cfg: &crate::config::AppConfig) -> Value {
             .map(|t| t.id.as_str())
             .collect::<Vec<_>>(),
         "max": crate::services::MAX_SERVICES,
-        "hint": "un LED nuevo es un service + un toggle: {\"op\":\"services\",\"set\":[…]}, después {\"op\":\"toggles\",\"set\":[…]}",
+        "hint": "a new LED is a service + a toggle: {\"op\":\"services\",\"set\":[…]}, then {\"op\":\"toggles\",\"set\":[…]}",
     })
 }
 
@@ -2168,16 +2168,16 @@ mod tests {
         let six: Vec<Value> = (0..crate::toggles::MAX_TOGGLES + 1).map(|_| one.clone()).collect();
         let reply = toggles_op(&json!({ "op": "toggles", "set": six }), &state).await;
         assert_eq!(reply["ok"], json!(false));
-        assert!(reply["error"].as_str().unwrap().contains("máximo"));
+        assert!(reply["error"].as_str().unwrap().contains("at most"));
     }
 
     #[test]
     fn long_output_is_clipped_on_a_char_boundary() {
-        assert_eq!(clip(b"hola", MAX_OUTPUT_BYTES), "hola");
+        assert_eq!(clip(b"hello", MAX_OUTPUT_BYTES), "hello");
         let big = vec![b'a'; MAX_OUTPUT_BYTES + 64];
         let out = clip(&big, MAX_OUTPUT_BYTES);
-        assert!(out.ends_with("…[recortado]"));
-        assert!(out.len() <= MAX_OUTPUT_BYTES + "…[recortado]".len());
+        assert!(out.ends_with("…[truncated]"));
+        assert!(out.len() <= MAX_OUTPUT_BYTES + "…[truncated]".len());
     }
 
     #[test]
@@ -2351,7 +2351,7 @@ mod tests {
         ])
         .expect_err("ambiguous");
         assert_eq!(err["ok"], json!(false));
-        assert!(err["error"].as_str().unwrap().contains("ambiguo"));
+        assert!(err["error"].as_str().unwrap().contains("ambiguous"));
         assert_eq!(err["candidates"].as_array().map(Vec::len), Some(2));
     }
 
@@ -2407,7 +2407,7 @@ mod tests {
     fn child_exit_code_and_stdout_are_reported() {
         let out = run_child(
             "cmd.exe",
-            &["/c".into(), "echo hola & exit 7".into()],
+            &["/c".into(), "echo hello & exit 7".into()],
             &[],
             None,
             Duration::from_secs(30),
@@ -2417,13 +2417,13 @@ mod tests {
         assert!(!out.timed_out);
         assert_eq!(out.code, Some(7));
         assert!(!out.success);
-        assert!(String::from_utf8_lossy(&out.stdout).contains("hola"));
+        assert!(String::from_utf8_lossy(&out.stdout).contains("hello"));
     }
 
     #[cfg(windows)]
     #[test]
     fn secrets_reach_the_child_environment() {
-        let env = vec![("EDGEPASS_TEST_TOKEN".to_string(), "s3creto".to_string())];
+        let env = vec![("EDGEPASS_TEST_TOKEN".to_string(), "s3cret".to_string())];
         let out = run_child(
             "cmd.exe",
             &["/c".into(), "echo %EDGEPASS_TEST_TOKEN%".into()],
@@ -2434,7 +2434,7 @@ mod tests {
         )
         .expect("spawn cmd");
         assert!(out.success);
-        assert!(String::from_utf8_lossy(&out.stdout).contains("s3creto"));
+        assert!(String::from_utf8_lossy(&out.stdout).contains("s3cret"));
     }
 
     #[cfg(windows)]
@@ -2539,7 +2539,7 @@ echo shim-ok
                     found.display()
                 );
             }
-            None => eprintln!("npm no está en PATH; se omite"),
+            None => eprintln!("npm is not on PATH; skipping"),
         }
     }
 
@@ -2547,7 +2547,7 @@ echo shim-ok
     #[test]
     fn a_missing_program_is_an_error_not_a_panic() {
         let err = run_child(
-            "edgepass-no-existe.exe",
+            "edgepass-missing.exe",
             &[],
             &[],
             None,
@@ -2555,7 +2555,7 @@ echo shim-ok
             None,
         )
         .expect_err("must fail");
-        assert!(err.contains("edgepass-no-existe.exe"));
+        assert!(err.contains("edgepass-missing.exe"));
     }
 
     #[test]

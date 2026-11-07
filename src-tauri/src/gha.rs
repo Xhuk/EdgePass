@@ -178,7 +178,7 @@ pub struct GhaRunnerStatusDto {
     /// The log shows the registration 404: the token died and the container is looping.
     pub credential_error: bool,
     pub healthy: bool,
-    /// The job in flight, if any — "simplemente saber que está corriendo".
+    /// The job in flight, if any — "just to know it is running".
     #[serde(skip_serializing_if = "Option::is_none")]
     pub job: Option<GhaJobDto>,
     pub message: String,
@@ -271,7 +271,7 @@ pub fn current_job(text: &str) -> Option<GhaJobDto> {
         .find(GhaJobDto::running)
 }
 
-/// `"hace 2m 30s"` — for the tooltip, which has no room for a date.
+/// `"for 2m 30s"` — for the tooltip, which has no room for a date.
 pub fn humanize_secs(secs: i64) -> String {
     match secs {
         s if s < 60 => format!("{s}s"),
@@ -303,47 +303,47 @@ fn runner_message(
     job: Option<&GhaJobDto>,
 ) -> String {
     if !docker_up {
-        return "Docker Desktop no responde".into();
+        return "Docker Desktop is not responding".into();
     }
     if !image_present {
         return format!(
-            "falta la imagen {} (se construye al arrancar)",
+            "missing image {} (built on start)",
             spec.image_or_default()
         );
     }
     match facts {
-        None => format!("{} no existe: se crea al arrancar", spec.container()),
+        None => format!("{} does not exist: created on start", spec.container()),
         Some(_) if credential_error => format!(
-            "{} en loop: la credencial del runner venció (click para recrearlo)",
+            "{} looping: the runner credential expired (click to recreate it)",
             spec.container()
         ),
         Some(f) if !f.running() => format!(
-            "{} {} ({} reinicios): click para levantarlo",
+            "{} {} ({} restarts): click to bring it up",
             spec.container(),
             f.state,
             f.restart_count
         ),
-        // Arriba — y si hay un job, se dice ("simplemente saber que está corriendo"). Un
-        // job ya terminado deja su resultado, que es la otra mitad de la respuesta.
+        // Up — and if there is a job, it is said ("just to know it is running"). A
+        // finished job leaves its result, which is the other half of the answer.
         Some(_) => match job {
             Some(j) if j.running() => format!(
-                "{} arriba · job «{}»{} · repo {}",
+                "{} up · job «{}»{} · repo {}",
                 spec.container(),
                 j.name,
                 j.running_for_secs
-                    .map(|s| format!(" hace {}", humanize_secs(s)))
+                    .map(|s| format!(" for {}", humanize_secs(s)))
                     .unwrap_or_default(),
                 spec.repo
             ),
             Some(j) => format!(
-                "{} arriba · último job «{}» {} · repo {}",
+                "{} up · last job «{}» {} · repo {}",
                 spec.container(),
                 j.name,
-                j.result.clone().unwrap_or_else(|| "sin resultado".into()),
+                j.result.clone().unwrap_or_else(|| "no result".into()),
                 spec.repo
             ),
             None => format!(
-                "{} arriba · repo {} · labels {}",
+                "{} up · repo {} · labels {}",
                 spec.container(),
                 spec.repo,
                 spec.labels_or_default()
@@ -380,9 +380,9 @@ pub fn status(cfg: &crate::config::AppConfig) -> GhaStatusDto {
             && image_present
             && facts.as_ref().map(ContainerFacts::running).unwrap_or(false)
             && !credential_error;
-        // Un job solo puede estar corriendo si el contenedor está arriba, y leer su log
-        // cuesta un `docker logs --tail 60` (el log entero de un runner sano son ~36
-        // líneas): es lo que responde "¿está corriendo algo?" sin abrir nada.
+        // A job can only be running if the container is up, and reading its log costs a
+        // `docker logs --tail 60` (a healthy runner's whole log is ~36 lines): that is
+        // what answers "is anything running?" without opening anything.
         let job = if facts.as_ref().map(ContainerFacts::running).unwrap_or(false) {
             container_job(&spec.container())
         } else {
@@ -416,33 +416,33 @@ pub fn status(cfg: &crate::config::AppConfig) -> GhaStatusDto {
 
     let message = if !docker_up {
         if desktop_exe(cfg).is_file() {
-            "Docker Desktop parado: click para arrancarlo".into()
+            "Docker Desktop stopped: click to start it".into()
         } else {
-            "Docker Desktop no responde y no encuentro su .exe".into()
+            "Docker Desktop is not responding and I cannot find its .exe".into()
         }
     } else if cfg.gha_runners.is_empty() {
-        "Docker arriba · sin runners declarados (scripts\\gha-local.ps1-Add)".into()
+        "Docker up · no declared runners (scripts\\gha-local.ps1-Add)".into()
     } else if runners.iter().all(|r| r.healthy) {
-        // Con varios runners sanos el resumen agregado escondía lo único que importa
-        // cuando algo corre: se nombra el job, y en qué runner.
+        // With several healthy runners the aggregate summary hid the only thing that
+        // matters when something runs: the job is named, and on which runner.
         let running: Vec<String> = runners
             .iter()
             .filter_map(|r| {
                 r.job.as_ref().filter(|j| j.running()).map(|j| {
                     format!(
-                        "job «{}» en {}{}",
+                        "job «{}» on {}{}",
                         j.name,
                         r.id,
                         j.running_for_secs
-                            .map(|s| format!(" hace {}", humanize_secs(s)))
+                            .map(|s| format!(" for {}", humanize_secs(s)))
                             .unwrap_or_default()
                     )
                 })
             })
             .collect();
         let up = match runners.len() {
-            1 => "1 runner arriba".to_string(),
-            n => format!("{n} runners arriba"),
+            1 => "1 runner up".to_string(),
+            n => format!("{n} runners up"),
         };
         match (running.is_empty(), runners.len()) {
             (false, _) => format!("{up} · {}", running.join(" · ")),
@@ -454,7 +454,7 @@ pub fn status(cfg: &crate::config::AppConfig) -> GhaStatusDto {
             .iter()
             .find(|r| !r.healthy)
             .map(|r| r.message.clone())
-            .unwrap_or_else(|| "runner a medias".into())
+            .unwrap_or_else(|| "runner half-up".into())
     };
 
     GhaStatusDto {
@@ -495,8 +495,8 @@ pub fn lifecycle_log(name: &str, tail: usize) -> Result<String, String> {
 pub fn worker_script(tail: usize) -> String {
     format!(
         "f=$(ls -t {WORKER_LOG_DIR}/Worker_*.log 2>/dev/null | head -1); \
-         if [ -n \"$f\" ]; then printf '== %s (últimas %s líneas) ==\\n' \"$f\" {tail}; tail -n {tail} \"$f\"; \
-         else echo 'sin Worker log: ningún job corrió en este contenedor'; fi"
+         if [ -n \"$f\" ]; then printf '== %s (last %s lines) ==\\n' \"$f\" {tail}; tail -n {tail} \"$f\"; \
+         else echo 'no Worker log: no job has run in this container'; fi"
     )
 }
 
@@ -532,32 +532,32 @@ pub fn logs(
     let (want_lifecycle, want_worker) = match source.as_str() {
         LOG_LIFECYCLE => (true, false),
         LOG_WORKER => (false, true),
-        // `both`, y cualquier otra cosa: mejor mostrar de más que quedarse en blanco.
+        // `both`, and anything else: better to show too much than to stay blank.
         _ => (true, true),
     };
     let mut out = String::new();
     for spec in specs {
         let name = spec.container();
         let state = match container_facts(&name) {
-            Some(f) => format!("{} ({} reinicios)", f.state, f.restart_count),
-            None => "no existe".into(),
+            Some(f) => format!("{} ({} restarts)", f.state, f.restart_count),
+            None => "does not exist".into(),
         };
         let job = container_job(&name)
             .map(|j| match j.running() {
                 true => format!(
-                    "job «{}» hace {}",
+                    "job «{}» for {}",
                     j.name,
                     j.running_for_secs
                         .map(humanize_secs)
                         .unwrap_or_else(|| "?".into())
                 ),
                 false => format!(
-                    "sin job en curso (último: «{}» {})",
+                    "no job in flight (last: «{}» {})",
                     j.name,
                     j.result.unwrap_or_else(|| "?".into())
                 ),
             })
-            .unwrap_or_else(|| "sin jobs todavía".into());
+            .unwrap_or_else(|| "no jobs yet".into());
         out.push_str(&format!("== {name} · {} · {state} · {job}\n", spec.repo));
         if want_lifecycle {
             out.push_str(
@@ -637,10 +637,10 @@ pub fn open_viewer(cfg: &crate::config::AppConfig, id: &str) -> Result<(), Strin
             && std::env::var("EDGEPASS_GHA_DIR").map(|v| v.trim().is_empty()).unwrap_or(true)
             && std::env::var("EDGEPASS_GHA_SCRIPT").map(|v| v.trim().is_empty()).unwrap_or(true);
         return Err(if nobody_conf {
-            "el visor del runner no está configurado: definí ghaDir (config) o EDGEPASS_GHA_DIR".into()
+            "the runner viewer is not configured: set ghaDir (config) or EDGEPASS_GHA_DIR".into()
         } else {
             format!(
-                "no encuentro el visor del runner en {} (definí ghaDir o EDGEPASS_GHA_SCRIPT)",
+                "cannot find the runner viewer at {} (set ghaDir or EDGEPASS_GHA_SCRIPT)",
                 script.display()
             )
         });
@@ -656,7 +656,7 @@ pub fn open_viewer(cfg: &crate::config::AppConfig, id: &str) -> Result<(), Strin
     hide(&mut cmd);
     cmd.spawn()
         .map(|_| ())
-        .map_err(|e| format!("no pude abrir el visor: {e}"))
+        .map_err(|e| format!("could not open the viewer: {e}"))
 }
 
 /// `GW` off: stop the runner container. Docker Desktop is deliberately untouched —
@@ -668,17 +668,17 @@ pub fn stop(cfg: &crate::config::AppConfig, id: Option<&str>) -> Result<String, 
         let name = spec.container();
         let facts = container_facts(&name);
         match facts {
-            None => said.push(format!("{name}: no existía")),
+            None => said.push(format!("{name}: did not exist")),
             Some(f) if !f.running() => {
                 // Clear the wreck either way: half-stopped is what the next click undoes.
                 let _ = docker(&["rm", "-f", &name]);
-                said.push(format!("{name}: estaba {}", f.state));
+                said.push(format!("{name}: was {}", f.state));
             }
             Some(_) => {
-                // `docker stop` imprime el *nombre* del contenedor, así que el mensaje
-                // se arma acá: si no, el toast sale "gha-local-x: gha-local-x".
+                // `docker stop` prints the container *name*, so the message is built
+                // here: otherwise the toast reads "gha-local-x: gha-local-x".
                 docker(&["stop", &name])?;
-                said.push(format!("{name}: parado"));
+                said.push(format!("{name}: stopped"));
             }
         }
     }
@@ -720,8 +720,8 @@ pub fn ensure(
     }
     let dir = dir_path(cfg);
     if dir.as_os_str().is_empty() || !dir.is_dir() {
-        // Sin la carpeta de assets no hay compose que llenar: el cómo, no la ruta de otra máquina.
-        return Err("ghaDir no está definido: apuntá al directorio con los assets del runner (ghaDir en la config o EDGEPASS_GHA_DIR)".into());
+        // Without the assets folder there is no compose to fill: the how, not another machine's path.
+        return Err("ghaDir is not set: point it at the directory holding the runner assets (ghaDir in the config or EDGEPASS_GHA_DIR)".into());
     }
     for spec in specs {
         said.push(ensure_runner(spec, &dir, secrets)?);
@@ -739,7 +739,7 @@ pub fn ensure_docker(cfg: &crate::config::AppConfig) -> Result<Option<String>, S
     let exe = desktop_exe(cfg);
     if !exe.is_file() {
         return Err(format!(
-            "Docker no responde y no encuentro Docker Desktop en {}",
+            "Docker is not responding and I cannot find Docker Desktop at {}",
             exe.display()
         ));
     }
@@ -750,17 +750,17 @@ pub fn ensure_docker(cfg: &crate::config::AppConfig) -> Result<Option<String>, S
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
     cmd.spawn()
-        .map_err(|e| format!("no pude arrancar Docker Desktop: {e}"))?;
+        .map_err(|e| format!("could not start Docker Desktop: {e}"))?;
 
     let deadline = Instant::now() + DOCKER_BOOT_TIMEOUT;
     while Instant::now() < deadline {
         if docker_ok(&["info", "--format", "{{.ServerVersion}}"]) {
-            return Ok(Some("Docker Desktop arrancado".into()));
+            return Ok(Some("Docker Desktop started".into()));
         }
         std::thread::sleep(Duration::from_secs(3));
     }
     Err(format!(
-        "arranqué Docker Desktop pero el motor no respondió en {}s",
+        "I started Docker Desktop but the engine did not answer within {}s",
         DOCKER_BOOT_TIMEOUT.as_secs()
     ))
 }
@@ -775,7 +775,7 @@ pub fn repair(cfg: &crate::config::AppConfig, secrets: &SecretMap) -> Result<Str
     }
     for spec in specs {
         let _ = docker(&["rm", "-f", &spec.container()]);
-        said.push(recreate(spec, secrets, "forzado")?);
+        said.push(recreate(spec, secrets, "forced")?);
     }
     Ok(said.join(" · "))
 }
@@ -787,14 +787,14 @@ fn ensure_runner(
 ) -> Result<String, String> {
     let name = spec.container();
     if spec.repo.trim().is_empty() {
-        return Err(format!("{}: falta el repo (owner/repo)", spec.id));
+        return Err(format!("{}: repo missing (owner/repo)", spec.id));
     }
 
     if !docker_ok(&["image", "inspect", &spec.image_or_default()]) {
         let dockerfile = dir.join("Dockerfile");
         if !dockerfile.is_file() {
             return Err(format!(
-                "falta la imagen {} y no encuentro {} (definí ghaDir)",
+                "missing image {} and cannot find {} (set ghaDir)",
                 spec.image_or_default(),
                 dockerfile.display()
             ));
@@ -812,15 +812,15 @@ fn ensure_runner(
     let healthy_now = facts.as_ref().map(ContainerFacts::running).unwrap_or(false)
         && !container_log_shows_credential_error(&name);
     if healthy_now {
-        return Ok(format!("{name}: ya estaba arriba"));
+        return Ok(format!("{name}: was already up"));
     }
 
     // A container that is there but not working is removed first: half-created state is
     // what breaks the next `docker run` (name in use, half-written work dir).
     let why = match facts.as_ref() {
         None => String::new(),
-        Some(_) if container_log_shows_credential_error(&name) => "credencial vencida".into(),
-        Some(f) if f.running() => "reiniciando".into(),
+        Some(_) if container_log_shows_credential_error(&name) => "credential expired".into(),
+        Some(f) if f.running() => "restarting".into(),
         Some(f) => f.state.clone(),
     };
     if facts.is_some() {
@@ -843,7 +843,7 @@ fn recreate(spec: &GhaRunnerSpec, secrets: &SecretMap, why: &str) -> Result<Stri
             Some(Err(e)) => return Err(format!("{}: {e}", spec.id)),
             None => {
                 return Err(format!(
-                    "{}: la acción no resolvió sus secretos antes de arrancar",
+                    "{}: the action did not resolve its secrets before starting",
                     spec.id
                 ))
             }
@@ -856,8 +856,8 @@ fn recreate(spec: &GhaRunnerSpec, secrets: &SecretMap, why: &str) -> Result<Stri
     let created = out.trim();
     let created = if created.is_empty() { &name } else { created };
     Ok(match why.is_empty() {
-        true => format!("{created}: creado"),
-        false => format!("{created}: recreado ({why})"),
+        true => format!("{created}: created"),
+        false => format!("{created}: recreated ({why})"),
     })
 }
 
@@ -917,17 +917,17 @@ pub fn registration_token(repo: &str) -> Result<String, String> {
     }
     let out = cmd
         .output()
-        .map_err(|e| format!("no pude ejecutar gh: {e}"))?;
+        .map_err(|e| format!("could not run gh: {e}"))?;
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr);
         return Err(format!(
-            "gh no pudo acuñar el token del runner para {repo}: {}",
+            "gh could not mint the runner token for {repo}: {}",
             err.trim()
         ));
     }
     let token = String::from_utf8_lossy(&out.stdout).trim().to_string();
     if token.is_empty() {
-        return Err(format!("gh devolvió un token vacío para {repo}"));
+        return Err(format!("gh returned an empty token for {repo}"));
     }
     Ok(token)
 }
@@ -944,7 +944,7 @@ fn pick<'a>(
             .map(|s| vec![s])
             .ok_or_else(|| {
                 format!(
-                    "runner desconocido: '{want}' · hay: {}",
+                    "unknown runner: '{want}' · available: {}",
                     cfg.gha_runners
                         .iter()
                         .map(|s| s.id.as_str())
@@ -953,7 +953,7 @@ fn pick<'a>(
                 )
             }),
         None if cfg.gha_runners.is_empty() => Err(
-            "no hay runners declarados: agregá uno con scripts\\gha-local.ps1 -Add -Repo owner/repo"
+            "no declared runners: add one with scripts\\gha-local.ps1 -Add -Repo owner/repo"
                 .into(),
         ),
         None => Ok(cfg.gha_runners.iter().collect()),
@@ -997,13 +997,13 @@ fn docker(args: &[&str]) -> Result<String, String> {
     hide(&mut cmd);
     let out = cmd
         .output()
-        .map_err(|e| format!("no pude ejecutar docker: {e}"))?;
+        .map_err(|e| format!("could not run docker: {e}"))?;
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr);
         let err = err.trim();
         return Err(if err.is_empty() {
-            format!("docker {} falló", args.first().unwrap_or(&"?"))
+            format!("docker {} failed", args.first().unwrap_or(&"?"))
         } else {
             err.to_string()
         });
@@ -1022,11 +1022,11 @@ fn docker_with_env(args: &[String], values: &[(String, String)]) -> Result<Strin
     hide(&mut cmd);
     let out = cmd
         .output()
-        .map_err(|e| format!("no pude ejecutar docker: {e}"))?;
+        .map_err(|e| format!("could not run docker: {e}"))?;
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr);
         return Err(format!(
-            "docker {} falló: {}",
+            "docker {} failed: {}",
             args.first().map(String::as_str).unwrap_or("?"),
             err.trim()
         ));
@@ -1113,11 +1113,11 @@ pub fn credential_error_from_logs(text: &str) -> bool {
         "not configured. run config.sh",
         "the runner registration failed",
         "cannot connect to the server",
-        // El caso gemelo: el token es válido pero GitHub ya no acepta esta versión de
-        // runner. La salida es la misma — recrear con una imagen más nueva.
+        // The twin case: the token is valid but GitHub no longer accepts this runner
+        // version. The way out is the same — recreate with a newer image.
         "out of date and can no longer register",
-        // Configuración a medias (`.runner` sin `.credentials`): el entrypoint se
-        // recupera solo, pero si un log viejo lo muestra, el LED nombra la causa.
+        // Half-done configuration (`.runner` without `.credentials`): the entrypoint
+        // recovers on its own, but if an old log shows it, the LED names the cause.
         "already configured",
     ]
     .iter()
@@ -1167,8 +1167,8 @@ mod tests {
         let s = spec();
         assert_eq!(s.container(), "gha-local-cb2");
         assert_eq!(s.volume(), "gha-local-work-cb2");
-        // Los campos vacíos caen a los defaults del producto, no a la nada: un
-        // `config.json` escrito a mano solo debería necesitar id + repo.
+        // Empty fields fall back to the product defaults, not to nothing: a
+        // hand-written `config.json` should only need id + repo.
         assert_eq!(s.image_or_default(), DEFAULT_IMAGE);
         assert_eq!(s.labels_or_default(), DEFAULT_LABELS);
     }
@@ -1189,27 +1189,27 @@ mod tests {
         );
     }
 
-    /// Los `mounts` extra entran tal cual (la llave del VPS es el caso real) y una
-    /// entrada vacía no genera un `-v ""` que rompería el `docker run`.
+    /// Extra `mounts` go through as-is (the VPS key is the real case) and an empty
+    /// entry does not produce a `-v ""` that would break the `docker run`.
     #[test]
     fn extra_mounts_are_passed_through_and_empty_ones_ignored() {
         let mut s = spec();
         s.socket_mount = DEFAULT_SOCKET.into();
         s.mounts = vec![
-            r"D:\llaves\vps:/keys/vps:ro".into(),
+            r"D:\keys\vps:/keys/vps:ro".into(),
             "   ".into(),
         ];
         let args = run_args(&s, &[]);
         let joined = args.join(" ");
         assert!(
-            joined.contains(r"-v D:\llaves\vps:/keys/vps:ro"),
+            joined.contains(r"-v D:\keys\vps:/keys/vps:ro"),
             "{joined}"
         );
         assert!(!joined.contains(r#"-v ""#), "{joined}");
         assert_eq!(
             args.iter().filter(|a| a.as_str() == "-v").count(),
             3,
-            "work + socket + un mount real: {joined}"
+            "work + socket + one real mount: {joined}"
         );
     }
 
@@ -1244,11 +1244,11 @@ mod tests {
         let line = args.join(" ");
         assert!(!line.contains("sup3r-s3cret"), "{line}");
         assert!(!line.contains("ghp_also-secret"), "{line}");
-        assert!(!line.contains('='), "ningún -e KEY=valor: {line}");
+        assert!(!line.contains('='), "no -e KEY=value: {line}");
         for key in ["RUNNER_TOKEN", "CR_PAT", "REPO_URL"] {
             assert!(
                 line.contains(&format!("-e {key} ")),
-                "falta -e {key}: {line}"
+                "missing -e {key}: {line}"
             );
         }
         // The rest of the contract: detached, restarting, work volume, engine socket.
@@ -1270,7 +1270,7 @@ mod tests {
         assert!(facts_from_inspect("running|0").unwrap().running());
         assert_eq!(facts_from_inspect("restarting|7").unwrap().restart_count, 7);
         assert!(!facts_from_inspect("exited|1").unwrap().running());
-        assert_eq!(facts_from_inspect("basura"), None);
+        assert_eq!(facts_from_inspect("garbage"), None);
     }
 
     #[test]
@@ -1278,7 +1278,7 @@ mod tests {
         let bad = "2026-01-01 ERROR: Request to https://api.github.com/.../actions/runner-registration failed with 404 Not Found";
         assert!(credential_error_from_logs(bad));
         assert!(credential_error_from_logs("Not configured. Run config.sh."));
-        // Token válido pero versión de runner vieja: mismo diagnóstico, misma salida.
+        // Valid token but an old runner version: same diagnosis, same way out.
         assert!(credential_error_from_logs(
             "ERROR: Your runner version is out of date and can no longer register with GitHub."
         ));
@@ -1290,27 +1290,27 @@ mod tests {
     #[test]
     fn a_runner_is_only_reported_as_on_when_it_really_is() {
         let s = spec();
-        // No puede estar vivo sin Docker, ni sin imagen, ni con el log roto.
-        assert!(!runner_message(&s, false, true, None, false, None).contains("arriba"));
+        // It cannot be alive without Docker, without the image, or with a broken log.
+        assert!(!runner_message(&s, false, true, None, false, None).contains(" up"));
         assert!(runner_message(&s, false, true, None, false, None).contains("Docker Desktop"));
-        assert!(runner_message(&s, true, false, None, false, None).contains("falta la imagen"));
+        assert!(runner_message(&s, true, false, None, false, None).contains("missing image"));
 
         let up = ContainerFacts {
             state: "running".into(),
             restart_count: 0,
         };
-        assert!(runner_message(&s, true, true, Some(&up), false, None).contains("arriba"));
-        assert!(runner_message(&s, true, true, Some(&up), true, None).contains("venció"));
+        assert!(runner_message(&s, true, true, Some(&up), false, None).contains(" up"));
+        assert!(runner_message(&s, true, true, Some(&up), true, None).contains("expired"));
 
         let looped = ContainerFacts {
             state: "restarting".into(),
             restart_count: 4,
         };
-        assert!(runner_message(&s, true, true, Some(&looped), false, None).contains("4 reinicios"));
+        assert!(runner_message(&s, true, true, Some(&looped), false, None).contains("4 restarts"));
     }
 
-    /// "Simplemente saber que está corriendo": el LED lo dice, con el nombre del job y
-    /// cuánto lleva.
+    /// "Just to know it is running": the LED says it, with the job name and how long
+    /// it has been going.
     #[test]
     fn the_led_says_which_job_is_running() {
         let s = spec();
@@ -1327,7 +1327,7 @@ mod tests {
         };
         let said = runner_message(&s, true, true, Some(&up), false, Some(&running));
         assert!(said.contains("job «Checkout + backend (Go)»"), "{said}");
-        assert!(said.contains("hace 2m 30s"), "{said}");
+        assert!(said.contains("for 2m 30s"), "{said}");
 
         let done = GhaJobDto {
             result: Some("Failed".into()),
@@ -1336,17 +1336,17 @@ mod tests {
             ..running
         };
         let said = runner_message(&s, true, true, Some(&up), false, Some(&done));
-        assert!(said.contains("último job"), "{said}");
+        assert!(said.contains("last job"), "{said}");
         assert!(said.contains("Failed"), "{said}");
     }
 
-    /// El log de ciclo de vida del runner: qué job corre ahora y cómo terminaron los
-    /// anteriores. La redacción la fija el runner, así que el parseo va con tests.
+    /// The runner's lifecycle log: which job runs now and how the previous ones ended.
+    /// The runner's own wording fixes it, so the parsing comes with tests.
     #[test]
     fn the_lifecycle_log_tells_which_job_is_running() {
         let log = "\
-2026-10-14 22:02:56Z: Running job: Quién corre y con qué
-2026-10-14 22:03:01Z: Job Quién corre y con qué completed with result: Succeeded
+2026-10-14 22:02:56Z: Running job: Who runs and with what
+2026-10-14 22:03:01Z: Job Who runs and with what completed with result: Succeeded
 2026-10-14 22:03:02Z: Running job: Checkout + backend (Go)
 ";
         let jobs = jobs_from_log(log);
@@ -1354,12 +1354,12 @@ mod tests {
         assert_eq!(jobs[0].result.as_deref(), Some("Succeeded"));
         assert!(jobs[0].finished.is_some());
 
-        let current = current_job(log).expect("hay uno corriendo");
+        let current = current_job(log).expect("one is running");
         assert_eq!(current.name, "Checkout + backend (Go)");
         assert!(current.running());
-        assert_eq!(current.running_for_secs, None, "lo llena container_job");
+        assert_eq!(current.running_for_secs, None, "container_job fills it");
 
-        // Cortado antes del segundo `Running job`: no hay nada en curso.
+        // Cut before the second `Running job`: nothing is in flight.
         let older = &log[..log.find("2026-10-14 22:03:02Z").unwrap()];
         assert!(current_job(older).is_none());
     }
@@ -1375,13 +1375,13 @@ mod tests {
     fn garbage_in_the_log_does_not_invent_jobs() {
         assert!(jobs_from_log("").is_empty());
         assert!(jobs_from_log("√ Connected to GitHub\nListening for Jobs").is_empty());
-        // Una línea con timestamp pero sin verbo conocido se ignora.
-        assert!(jobs_from_log("2026-10-14 22:00:00Z: algo raro").is_empty());
-        // Un job repetido no se confunde con el que ya terminó.
+        // A line with a timestamp but no known verb is ignored.
+        assert!(jobs_from_log("2026-10-14 22:00:00Z: something odd").is_empty());
+        // A repeated job is not confused with the one that already finished.
         let log = "2026-10-14 22:00:00Z: Running job: x\n2026-10-14 22:00:01Z: Job x completed with result: Succeeded\n2026-10-14 22:00:02Z: Running job: x\n";
         let jobs = jobs_from_log(log);
         assert_eq!(jobs.len(), 2);
-        assert!(jobs[1].running(), "el segundo x sigue corriendo");
+        assert!(jobs[1].running(), "the second x is still running");
     }
 
     #[test]
@@ -1390,7 +1390,7 @@ mod tests {
             chrono::NaiveDateTime::parse_from_str("2026-10-14 22:05:30Z", "%Y-%m-%d %H:%M:%SZ")
                 .unwrap();
         assert_eq!(elapsed_secs("2026-10-14 22:03:00Z", now), Some(150));
-        assert_eq!(elapsed_secs("no soy un stamp", now), None);
+        assert_eq!(elapsed_secs("not a stamp", now), None);
         assert_eq!(humanize_secs(45), "45s");
         assert_eq!(humanize_secs(150), "2m 30s");
         assert_eq!(humanize_secs(3700), "1h 1m");
@@ -1398,8 +1398,8 @@ mod tests {
 
     #[test]
     fn the_worker_log_command_survives_the_container_quoting() {
-        // El script viaja como un solo argumento a `sh -c` dentro del contenedor: si las
-        // comillas se rompen, el visor muestra la nada y nadie se entera.
+        // The script travels as a single argument to `sh -c` inside the container: if the
+        // quotes break, the viewer shows nothing and nobody finds out.
         let script = worker_script(200);
         assert!(
             script.contains("ls -t /home/runner/actions-runner/_diag/Worker_*.log"),
@@ -1409,7 +1409,7 @@ mod tests {
         assert!(script.contains("if [ -n \"$f\" ]"), "{script}");
     }
 
-    /// El visor se abre una vez por job, no una vez por tick del watcher.
+    /// The viewer opens once per job, not once per watcher tick.
     #[test]
     fn the_watcher_announces_each_job_once() {
         let mut seen = std::collections::HashMap::new();
@@ -1420,55 +1420,55 @@ mod tests {
             finished: None,
             running_for_secs: Some(5),
         };
-        let live = vec![("mi-app".to_string(), job.clone())];
+        let live = vec![("my-app".to_string(), job.clone())];
 
         let first = new_jobs(&seen, &live);
-        assert_eq!(first.len(), 1, "el primero se anuncia");
-        seen.insert("mi-app".to_string(), job.started.clone());
+        assert_eq!(first.len(), 1, "the first one is announced");
+        seen.insert("my-app".to_string(), job.started.clone());
         assert!(
             new_jobs(&seen, &live).is_empty(),
-            "el mismo job no se repite"
+            "the same job is not repeated"
         );
 
-        // Otro job (u otro arranque del mismo nombre) sí vuelve a anunciarse.
+        // Another job (or another start of the same name) is announced again.
         let later = GhaJobDto {
             started: "2026-10-14 22:20:00Z".into(),
             ..job.clone()
         };
-        let live = vec![("mi-app".to_string(), later)];
+        let live = vec![("my-app".to_string(), later)];
         assert_eq!(new_jobs(&seen, &live).len(), 1);
 
-        // Y un job ya terminado no abre nada.
+        // And a finished job opens nothing.
         let done = GhaJobDto {
             result: Some("Succeeded".into()),
             ..job
         };
-        let live = vec![("mi-app".to_string(), done)];
+        let live = vec![("my-app".to_string(), done)];
         assert!(new_jobs(&seen, &live).is_empty());
     }
 
     #[test]
     fn the_viewer_and_the_assets_are_where_the_config_says() {
         let mut cfg = crate::config::AppConfig::default();
-        cfg.gha_dir = r"D:\otro\docker\gha-local".into();
+        cfg.gha_dir = r"D:\other\docker\gha-local".into();
         assert_eq!(
             script_path(&cfg),
-            PathBuf::from(r"D:\otro\scripts\gha-local.ps1"),
-            "dos niveles arriba de ghaDir"
+            PathBuf::from(r"D:\other\scripts\gha-local.ps1"),
+            "two levels above ghaDir"
         );
     }
 
-    /// Con dos runners declarados, el resumen tiene que seguir diciendo qué corre: era
-    /// justo el caso donde se perdía ("2 runners arriba" y nada más).
+    /// With two declared runners, the summary must still say what runs: that was
+    /// exactly the case where it got lost ("2 runners up" and nothing else).
     #[test]
     fn the_summary_still_names_a_running_job_with_more_than_one_runner() {
         let mut cfg = crate::config::AppConfig::default();
         let mut a = spec();
-        a.id = "uno".into();
-        a.repo = "Xhuk/uno".into();
+        a.id = "one".into();
+        a.repo = "Xhuk/one".into();
         let mut b = spec();
-        b.id = "dos".into();
-        b.repo = "Xhuk/dos".into();
+        b.id = "two".into();
+        b.repo = "Xhuk/two".into();
         cfg.gha_runners = vec![a, b];
 
         let healthy = |id: &str, job: Option<GhaJobDto>| GhaRunnerStatusDto {
@@ -1482,7 +1482,7 @@ mod tests {
             credential_error: false,
             healthy: true,
             job,
-            message: format!("gha-local-{id} arriba"),
+            message: format!("gha-local-{id} up"),
         };
         let running = GhaJobDto {
             name: "Checkout + backend (Go)".into(),
@@ -1496,12 +1496,12 @@ mod tests {
             desktop_running: true,
             desktop_exe: "x".into(),
             dir: "y".into(),
-            runners: vec![healthy("uno", None), healthy("dos", Some(running))],
+            runners: vec![healthy("one", None), healthy("two", Some(running))],
             message: String::new(),
         };
         assert!(all_healthy(&st));
 
-        // La misma agregación que hace `status`, sin tocar Docker.
+        // The same aggregation `status` does, without touching Docker.
         let running_txt: Vec<String> = st
             .runners
             .iter()
@@ -1509,9 +1509,9 @@ mod tests {
                 r.job
                     .as_ref()
                     .filter(|j| j.running())
-                    .map(|j| format!("job «{}» en {}", j.name, r.id))
+                    .map(|j| format!("job «{}» on {}", j.name, r.id))
             })
             .collect();
-        assert_eq!(running_txt, vec!["job «Checkout + backend (Go)» en dos"]);
+        assert_eq!(running_txt, vec!["job «Checkout + backend (Go)» on two"]);
     }
 }

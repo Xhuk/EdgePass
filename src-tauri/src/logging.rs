@@ -4,7 +4,7 @@
 //! and `strip = true`, so `eprintln!` goes nowhere and a failure leaves no
 //! trace at all. Every decision the widget makes (seal/unseal, sync, IPC ops,
 //! refusals) goes through here and lands in
-//! `%APPDATA%\edgePass\logs\edgepass.log`, which is what the Diagnóstico panel
+//! `%APPDATA%\edgePass\logs\edgepass.log`, which is what the Diagnostics panel
 //! shows. No external crates: one file, one rotation, one panic hook.
 
 use std::fs::{self, File, OpenOptions};
@@ -119,13 +119,13 @@ pub fn init() {
     line(
         "----",
         &format!(
-            "edgePass {} arrancó (os={}, exe={})",
+            "edgePass {} started (os={}, exe={})",
             env!("CARGO_PKG_VERSION"),
             std::env::consts::OS,
             exe
         ),
     );
-    line("INFO", &format!("log en {}", log_path().display()));
+    line("INFO", &format!("log at {}", log_path().display()));
 }
 
 /// A panic in a release build otherwise dies silently: `panic = "abort"`
@@ -141,13 +141,13 @@ pub fn install_panic_hook() {
         } else if let Some(s) = info.payload().downcast_ref::<String>() {
             s.clone()
         } else {
-            "panic sin mensaje".into()
+            "panic without a message".into()
         };
         line("PANIC", &format!("{what} ({where_})"));
     }));
 }
 
-/// Last `n` lines of the current log, for the Diagnóstico panel.
+/// Last `n` lines of the current log, for the Diagnostics panel.
 pub fn tail(n: usize) -> String {
     let raw = fs::read_to_string(log_path()).unwrap_or_default();
     let lines: Vec<&str> = raw.lines().rev().take(n).collect();
@@ -166,7 +166,7 @@ mod tests {
     fn tmp_dir(tag: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("edgepass-{tag}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).expect("carpeta temporal");
+        fs::create_dir_all(&dir).expect("temp dir");
         dir
     }
 
@@ -175,11 +175,11 @@ mod tests {
         let dir = tmp_dir("rot");
         let path = dir.join("edgepass.log");
         if fs::write(&path, vec![b'x'; (MAX_LOG_BYTES + 1) as usize]).is_err() {
-            return; // sin espacio en el temporal: no es asunto de este test
+            return; // no space in the temp dir: not this test's business
         }
         rotate_if_needed(&path);
-        assert!(!path.exists(), "el archivo actual debio moverse");
-        assert!(dir.join(PREV_FILE).exists(), "no quedo el archivo previo");
+        assert!(!path.exists(), "the current file should have been moved");
+        assert!(dir.join(PREV_FILE).exists(), "the previous file was not left behind");
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -187,9 +187,9 @@ mod tests {
     fn a_small_file_is_left_alone() {
         let dir = tmp_dir("rot-small");
         let path = dir.join("edgepass.log");
-        fs::write(&path, b"hola\n").expect("archivo de prueba");
+        fs::write(&path, b"hello\n").expect("test file");
         rotate_if_needed(&path);
-        assert!(path.exists(), "un archivo chico no se toca");
+        assert!(path.exists(), "a small file is left alone");
         assert!(!dir.join(PREV_FILE).exists());
         let _ = fs::remove_dir_all(&dir);
     }

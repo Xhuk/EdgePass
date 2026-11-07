@@ -533,7 +533,7 @@ function withoutDockNoise(tail: string): string {
     .join("\n")
     .trimEnd();
   return kept.trim() === ""
-    ? "(sólo líneas del vigilante de acople; marcá la casilla para verlas)"
+    ? t("(only dock watcher lines; tick the box to see them)")
     : kept;
 }
 type Diagnostics = {
@@ -607,8 +607,8 @@ function buildReport(d: Diagnostics): string {
     ["baoAddr", redact(d.baoAddr)],
     ["mount", d.mount],
     ["namespaces", d.namespaces.join(", ") || "(root)"],
-    ["initJson", d.initPath ? nameOf(d.initPath) : "(sin configurar)"],
-    ["token", d.hasToken ? "cargado" : "sin token"],
+    ["initJson", d.initPath ? nameOf(d.initPath) : t("(not configured)")],
+    ["token", d.hasToken ? t("loaded") : t("no token")],
     ["autoUnseal", String(d.autoUnseal)],
     ["autoSealIdleSecs", String(d.autoSealIdleSecs)],
     ["autoCollapseIdleSecs", String(d.autoCollapseIdleSecs)],
@@ -620,17 +620,17 @@ function buildReport(d: Diagnostics): string {
         .map((r) => `${r.runId}:${r.state}:exit=${r.code ?? "-"}`)
         .join(" | ") || "(none)",
     ],
-    ["indexadas", String(d.indexed)],
+    ["indexed", String(d.indexed)],
     ["lastSync", d.lastSync ?? "-"],
     ["vault", redact(`${d.seal.message} (reachable=${d.seal.reachable}, sealed=${d.seal.sealed})`)],
-    ["servicio", redact(`${d.service.state} · ${d.service.message}`)],
+    ["service", redact(`${d.service.state} · ${d.service.message}`)],
   ];
   return [
-    "edgePass · informe de diagnóstico",
+    t("edgePass · diagnostics report"),
     ...rows.map(([k, v]) => `${k}: ${v}`),
     "",
-    "--- log (últimas líneas, redactado) ---",
-    redact(d.logTail || "(vacío)"),
+    t("--- log (last lines, redacted) ---"),
+    redact(d.logTail || t("(empty)")),
   ].join("\n");
 }
 
@@ -669,23 +669,23 @@ function setupText(code: string): string {
   switch (code) {
     case "vault_uninitialized":
       return t(
-        "OpenBao responde pero no está inicializado: corré bao operator init una vez y guardá el init file.",
+        "OpenBao answers but is not initialized: run `bao operator init` once and keep the init file.",
       );
     case "no_token":
       return t(
-        "El vault responde, pero no hay token cargado: pegá uno manual en Ajustes → Vault o define el Init JSON para que el widget lo lea solo.",
+        "The vault answers, but no token is loaded: paste one in Settings → Vault, or set the Init JSON so the widget reads it on its own.",
       );
     case "init_file_missing":
       return t(
-        "El init file configurado no existe: revisá la ruta en Ajustes → Vault o mové el archivo.",
+        "The configured init file does not exist: check the path in Settings → Vault or move the file.",
       );
     case "vault_sealed":
       return t(
-        "El vault está sellado y no hay init file para abrirlo: unseal con las keys o configurá initPath en Ajustes → Vault.",
+        "The vault is sealed and there is no init file to open it: unseal with the keys or set initPath in Settings → Vault.",
       );
     default:
       return t(
-        "edgePass no es el vault: es el helper. Necesita un OpenBao local corriendo en loopback y un token: dirección, mount y namespace se definen en Ajustes → Vault.",
+        "edgePass is not the vault: it is the helper. It needs a local OpenBao running on loopback and a token: address, mount and namespace are set in Settings → Vault.",
       );
   }
 }
@@ -1084,7 +1084,7 @@ export default function App() {
 
   const bootstrap = useCallback(async () => {
     setBusy(true);
-    setBootMsg("Abriendo vault si hace falta…");
+    setBootMsg(t("Opening the vault if needed…"));
     try {
       const result = await invoke<{
         seal: SealStatus;
@@ -1445,7 +1445,7 @@ export default function App() {
             namespace: "",
             path: "",
             keys: [""],
-            title: t("Meter · nuevo secreto"),
+            title: t("Batch · new secret"),
           });
           return;
         }
@@ -2259,7 +2259,7 @@ export default function App() {
 
   async function mcpControl(id: string, dir: "on" | "off" | "restart") {
     if (!id.trim()) {
-      setMcpMsg("Guardá la lista primero: sin id no hay a quién hablarle.");
+      setMcpMsg(t("Save the list first: without an id there is nothing to talk to."));
       return;
     }
     setBusy(true);
@@ -2298,11 +2298,11 @@ export default function App() {
   async function mcpRegenerate(row: McpServerSpec, key: string) {
     const id = row.id.trim();
     if (!id) {
-      setMcpMsg("Guardá la lista primero: sin id no hay a quién acuñarle nada.");
+      setMcpMsg(t("Save the list first: without an id there is nothing to mint for."));
       return;
     }
     if (row.secretEnv.some((e) => !e.key.trim() || !e.path.trim() || !e.field.trim())) {
-      setMcpMsg("Completá variable, path y campo, y guardá: la fila tiene que declararlos.");
+      setMcpMsg(t("Fill in variable, path and field, then save: the row has to declare them."));
       return;
     }
     setBusy(true);
@@ -2623,7 +2623,7 @@ export default function App() {
       });
       const bits = made.entropyBits.toFixed(1).replace(".", ",");
       setPassNote(
-        `${bits} bits · ${made.words} ${t("palabras")}${made.advice ? " · " + made.advice : ""}`,
+        `${bits} bits · ${made.words} ${t("words")}${made.advice ? " · " + made.advice : ""}`,
       );
     } catch (e) {
       setError(String(e instanceof Error ? e.message : e));
@@ -2638,7 +2638,7 @@ export default function App() {
         settings: { ...passOpts, configured: true },
       });
       setPassConfigured(true);
-      setToast(t("Estilo de contraseñas guardado"));
+      setToast(t("Password style saved"));
     } catch (e) {
       setError(String(e instanceof Error ? e.message : e));
     }
@@ -2741,7 +2741,7 @@ export default function App() {
         const text = String(reader.result ?? "");
         const drafts = parseGooglePasswordCsv(text);
         if (!drafts.length) {
-          setError("CSV vacío o sin filas útiles");
+          setError(t("Empty CSV, or no usable rows"));
           setLoginDrafts([]);
           setLoginFileName(null);
           return;
@@ -2890,7 +2890,7 @@ export default function App() {
       lines.push(`Click = ${dir} · ${dir === "on" ? led.docs.on : led.docs.off}`);
       if (led.alt && led.docs.alt) lines.push(`Ctrl/clic derecho = ${led.docs.alt}`);
     } else {
-      lines.push(t("Solo mira: no tiene acción."));
+      lines.push(t("Read-only: no action."));
     }
     if (led.state.ask && grant) {
       lines.push(`Allow pendiente · ${grant.actor} · ${grant.path} (${grantLeft})`);
@@ -2972,8 +2972,8 @@ export default function App() {
     <div
       className={`drag-handle drag-handle-${variant}`}
       data-tauri-drag-region
-      title={t("Arrastrar widget")}
-      aria-label={t("Mover widget")}
+      title={t("Drag widget")}
+      aria-label={t("Move widget")}
     >
       <span className="drag-grip" data-tauri-drag-region aria-hidden />
     </div>
@@ -3018,7 +3018,7 @@ export default function App() {
   const loginRowForm = (editing: boolean) => (
     <div className="login-row-form">
       <div className="login-form">
-        <label>{t("Nombre")}<input
+        <label>{t("Name")}<input
             value={loginForm.name}
             onChange={(e) => setLoginForm({ ...loginForm, name: e.target.value })}
             placeholder={t("GitHub")}
@@ -3026,14 +3026,14 @@ export default function App() {
             autoFocus={!editing}
           />
         </label>
-        <label>{t("URL / dominio")}<input
+        <label>{t("URL / domain")}<input
             value={loginForm.url}
             onChange={(e) => setLoginForm({ ...loginForm, url: e.target.value })}
             placeholder={t("github.com")}
             spellCheck={false}
           />
         </label>
-        <label>{t("Usuario")}<input
+        <label>{t("User")}<input
             value={loginForm.username}
             onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
             spellCheck={false}
@@ -3046,7 +3046,7 @@ export default function App() {
             type="password"
             value={loginForm.password}
             onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-            placeholder={editing ? "(sin tocar)" : ""}
+            placeholder={editing ? t("(unchanged)") : ""}
             spellCheck={false}
             autoComplete="new-password"
           />
@@ -3060,7 +3060,7 @@ export default function App() {
             spellCheck={false}
           />
         </label>
-        <label>{t("Notas")}<input
+        <label>{t("Notes")}<input
             value={loginForm.notes}
             onChange={(e) => setLoginForm({ ...loginForm, notes: e.target.value })}
             spellCheck={false}
@@ -3077,7 +3077,7 @@ export default function App() {
         >
           {editing ? "Guardar" : "Agregar a la lista"}
         </motion.button>
-        <button type="button" className="ghost" disabled={busy} onClick={closeLoginRow}>{t("Cancelar")}</button>
+        <button type="button" className="ghost" disabled={busy} onClick={closeLoginRow}>{t("Cancel")}</button>
       </div>
     </div>
   );
@@ -3238,7 +3238,7 @@ export default function App() {
                         setBusy(false);
                       }
                     }}
-                    title={t("Iniciar servicio Windows OpenBao")}
+                    title={t("Start OpenBao Windows service")}
                   >
                     Svc
                   </motion.button>
@@ -3353,7 +3353,7 @@ export default function App() {
                   disabled={busy}
                   whileTap={tap}
                   onClick={onSync}
-                  title={t("Reindexar")}
+                  title={t("Reindex")}
                 >
                   ↻
                 </motion.button>
@@ -3404,7 +3404,7 @@ export default function App() {
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
                             onKeyDown={onSearchKey}
-                            placeholder={t("M2M · infisi cb2 · path variable…")}
+                            placeholder={t("M2M · infisi cb2 · variable path…")}
                             spellCheck={false}
                             autoComplete="off"
                             role="combobox"
@@ -3416,8 +3416,8 @@ export default function App() {
                             <button
                               type="button"
                               className="search-clear"
-                              title={t("Limpiar búsqueda")}
-                              aria-label={t("Limpiar búsqueda")}
+                              title={t("Clear search")}
+                              aria-label={t("Clear search")}
                               onClick={() => {
                                 setQuery("");
                                 inputRef.current?.focus();
@@ -3434,7 +3434,7 @@ export default function App() {
                           <span className="dot">·</span>
                           <span>click copiar · ✎ editar · ⌫ borrar</span>
                         </div>
-                        <ul className="hits" id="hits" role="listbox" aria-label={t("Secretos M2M")}>
+                        <ul className="hits" id="hits" role="listbox" aria-label={t("M2M secrets")}>
                           <AnimatePresence initial={false}>
                             {hits.length === 0 && (
                               <motion.li
@@ -3444,8 +3444,8 @@ export default function App() {
                                 transition={spring.content}
                               >
                                 {!seal?.reachable
-                                  ? bootMsg || t("OpenBao offline — arranca el servicio OpenBao")
-                                  : t("Sin secretos indexados aún")}
+                                  ? bootMsg || t("OpenBao offline — start the OpenBao service")
+                                  : t("No secrets indexed yet")}
                               </motion.li>
                             )}
                             {hits.map((hit, i) => (
@@ -3470,7 +3470,7 @@ export default function App() {
                                     aria-selected={i === selected}
                                     whileTap={{ scale: 0.985, transition: spring.press }}
                                     onClick={() => onCopy(hit)}
-                                    title={t("Copiar valor")}
+                                    title={t("Copy value")}
                                   >
                                     <div className="hit-top">
                                       <span className="hit-key">{hit.key}</span>
@@ -3491,7 +3491,7 @@ export default function App() {
                                   <button
                                     type="button"
                                     className="hit-edit"
-                                    title={t("Notas de este secreto (por qué se pidió, para qué)")}
+                                    title={t("Notes for this secret (why, what for)")}
                                     onClick={() => void openNotes(hit)}
                                   >
                                     🗒
@@ -3500,7 +3500,7 @@ export default function App() {
                                     type="button"
                                     className="hit-edit"
                                     disabled={busy}
-                                    title={t("Editar en Batch (sobrescribir)")}
+                                    title={t("Edit in Batch (overwrite)")}
                                     onClick={() => void openPathInMeter(hit.namespace, hit.path)}
                                   >
                                     ✎
@@ -3509,7 +3509,7 @@ export default function App() {
                                     type="button"
                                     className="hit-edit hit-del"
                                     disabled={busy}
-                                    title={t("Borrar esta variable")}
+                                    title={t("Delete this variable")}
                                     onClick={() => void onDeleteSecret(hit)}
                                   >
                                     ⌫
@@ -3519,7 +3519,7 @@ export default function App() {
                                   <div className="hit-notes">
                                     <div className="hit-notes-list">
                                       {noteRows.length === 0 && (
-                                        <span className="hint">{t("Sin notas todavía.")}</span>
+                                        <span className="hint">{t("No notes yet.")}</span>
                                       )}
                                       {noteRows.map((n) => (
                                         <div className="hit-note" key={n.id}>
@@ -3536,7 +3536,7 @@ export default function App() {
                                     <div className="hit-notes-add">
                                       <input
                                         value={noteDraft}
-                                        placeholder={t("¿por qué se pidió? ¿para qué sirve?")}
+                                        placeholder={t("why was it requested? what is it for?")}
                                         onChange={(e) => setNoteDraft(e.target.value)}
                                         onKeyDown={(e) => {
                                           if (e.key === "Enter") void saveNote(hit);
@@ -3547,7 +3547,7 @@ export default function App() {
                                         className="pill-btn"
                                         disabled={busy || !noteDraft.trim()}
                                         onClick={() => void saveNote(hit)}
-                                      >{t("Guardar nota")}</button>
+                                      >{t("Save note")}</button>
                                     </div>
                                   </div>
                                 )}
@@ -3567,8 +3567,8 @@ export default function App() {
                                 onClick={openSettings}
                               >
                                 {status.setup.code === "no_token"
-                                  ? t("Abrir Ajustes")
-                                  : t("Conectar un vault")}
+                                  ? t("Open Settings")
+                                  : t("Connect a vault")}
                               </motion.button>
                               {(status.setup.code === "vault_unreachable" ||
                                 status.setup.code === "vault_uninitialized") && (
@@ -3579,7 +3579,7 @@ export default function App() {
                                     void invoke("open_setup_link", { id: "openbao_install" })
                                   }
                                 >
-                                  {t("Instalar OpenBao")}
+                                  {t("Install OpenBao")}
                                 </button>
                               )}
                               {status.service.installed && !status.service.running && (
@@ -3589,7 +3589,7 @@ export default function App() {
                                   disabled={busyStartingOpenBao}
                                   onClick={() => void onOpenBaoStart()}
                                 >
-                                  {t("Arrancar servicio")}
+                                  {t("Start service")}
                                 </button>
                               )}
                               <button
@@ -3598,14 +3598,14 @@ export default function App() {
                                 disabled={busy}
                                 onClick={() => void bootstrap()}
                               >
-                                {t("Reintentar")}
+                                {t("Retry")}
                               </button>
                             </div>
                             {status.setup.code === "vault_unreachable" && (
                               <p className="hint">
-                                {t("Dirección configurada:")}{" "}
+                                {t("Configured address:")}{" "}
                                 <code>{status.baoAddr}</code> ·{" "}
-                                {t("OpenBao tiene que correr en loopback (127.0.0.1).")}
+                                {t("OpenBao must run on loopback (127.0.0.1).")}
                               </p>
                             )}
                           </div>
@@ -3625,7 +3625,7 @@ export default function App() {
                   >
                     <div className="batch-head">
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div className="batch-title">{ingest.title || t("Meter · nuevo secreto")}</div>
+                        <div className="batch-title">{ingest.title || t("Batch · new secret")}</div>
                         <div className="path-edit-meta" style={{ marginTop: 6 }}>
                           <input
                             className="batch-key"
@@ -3670,8 +3670,8 @@ export default function App() {
                           }}
                           title={
                             showMeterJson
-                              ? "Cargar JSON → filas editables (aún no guarda en vault)"
-                              : "Guardar en vault (Enter) · no auto-save"
+                              ? t("Load JSON → editable rows (does not save to the vault yet)")
+                              : t("Save to the vault (Enter) · no auto-save")
                           }
                           aria-label={
                             showMeterJson
@@ -3774,7 +3774,7 @@ export default function App() {
                           placeholder={`{\n  "kvpath": "projects/…",\n  "API_KEY": "…",\n  "DB_URL": "…"\n}`}
                           spellCheck={false}
                           rows={7}
-                          aria-label={t("Pegar JSON en Batch")}
+                          aria-label={t("Paste JSON in Batch")}
                           autoFocus
                         />
                         <p className="meter-json-hint">
@@ -3786,7 +3786,7 @@ export default function App() {
                     <div className="batch-table" role="table">
                       <div className="batch-row head" role="row">
                         <span>{t("Variable")}</span>
-                        <span>{t("Valor")}</span>
+                        <span>{t("Value")}</span>
                       </div>
                       {batchRows
                         .slice(
@@ -3825,7 +3825,7 @@ export default function App() {
                                 type={maskedRows.has(idx) ? "password" : "text"}
                                 autoComplete="off"
                                 value={row.value}
-                                placeholder={t("valor / placeholder… · Enter guarda")}
+                                placeholder={t("value / placeholder… · Enter saves")}
                                 onChange={(e) => {
                                   const next = [...batchRows];
                                   next[idx] = { ...next[idx]!, value: e.target.value };
@@ -3858,7 +3858,7 @@ export default function App() {
                                 className="ghost batch-act"
                                 disabled={!row.value}
                                 onClick={() => void onCopyRow(row)}
-                                title={t("Copiar valor")}
+                                title={t("Copy value")}
                                 aria-label={`Copiar ${row.key.trim() || "valor"}`}
                               >
                                 ⧉
@@ -3878,8 +3878,8 @@ export default function App() {
                                     : spring.content
                                 }
                                 onClick={() => void onSuggestPassphrase(idx)}
-                                title={t("Sugerir contraseña")}
-                                aria-label={`${t("Sugerir contraseña")} para ${row.key.trim() || "la variable"}`}
+                                title={t("Suggest password")}
+                                aria-label={`${t("Suggest password")} para ${row.key.trim() || "la variable"}`}
                               >
                                 ✦
                               </motion.button>
@@ -3927,7 +3927,7 @@ export default function App() {
                             { jsonPaste: next },
                           ).catch(() => undefined);
                         }}
-                        title={t("Pegar objeto JSON con kvpath + campos")}
+                        title={t("Paste a JSON object with kvpath + fields")}
                       >
                         {showMeterJson ? "Ocultar JSON" : "Pegar JSON"}
                       </button>
@@ -3936,7 +3936,7 @@ export default function App() {
                         className="ghost"
                         disabled={!batchRows.some((r) => r.key.trim())}
                         onClick={() => void onCopyBlock()}
-                        title={t("Copiar todas las entradas como líneas KEY=valor")}
+                        title={t("Copy all entries as KEY=value lines")}
                       >
                         ⧉ copiar todo
                       </button>
@@ -3945,7 +3945,7 @@ export default function App() {
                         className="ghost"
                         disabled={!batchRows.length}
                         onClick={onToggleAllMask}
-                        title={t("Mostrar u ocultar todos los valores")}
+                        title={t("Show or hide all values")}
                       >
                         {maskedRows.size ? "ver todo" : "ocultar todo"}
                       </button>
@@ -3964,7 +3964,7 @@ export default function App() {
                           type="checkbox"
                           checked={batchReplaceAll}
                           onChange={(e) => setBatchReplaceAll(e.target.checked)}
-                        />{t("Reemplazar path")}</label>
+                        />{t("Replace path")}</label>
                       
                       <button
                         type="button"
@@ -3975,14 +3975,14 @@ export default function App() {
                           setBatchPage(0);
                           setMeterSaveFlash(false);
                         }}
-                      >{t("Descartar")}</button>
+                      >{t("Discard")}</button>
                     </div>
 
                     {passFirstRun !== null && (
                       <div
                         role="dialog"
                         aria-modal="true"
-                        aria-label={t("Contraseñas sugeridas")}
+                        aria-label={t("Suggested passwords")}
                         style={{
                           position: "absolute",
                           inset: 0,
@@ -3995,12 +3995,12 @@ export default function App() {
                         }}
                       >
                         <div className="group" style={{ maxWidth: 380 }}>
-                          <p className="group-title">{t("Contraseñas sugeridas")}</p>
+                          <p className="group-title">{t("Suggested passwords")}</p>
                           <p className="hint">
-                            {t("Primera vez. Elegí cómo se arma la frase y queda guardado. Después se cambia en Ajustes.")}
+                            {t("First time. Choose how the phrase is built and it is saved. Change it later in Settings.")}
                           </p>
                           <label>
-                            {t("Palabras")}
+                            {t("Words")}
                             <select
                               value={passOpts.words}
                               onChange={(e) =>
@@ -4013,7 +4013,7 @@ export default function App() {
                             </select>
                           </label>
                           <label>
-                            {t("Aleatorio")}
+                            {t("Random")}
                             <select
                               value={passOpts.randomChars}
                               onChange={(e) =>
@@ -4026,10 +4026,10 @@ export default function App() {
                             </select>
                           </label>
                           <p className="hint">
-                            {t("Caracteres frescos por frase; no se guardan. El salt de instalación solo diversifica entre máquinas.")}
+                            {t("Fresh characters per phrase; they are not stored. The install salt only diversifies across machines.")}
                           </p>
                           <label>
-                            {t("Separador")}
+                            {t("Separator")}
                             <select
                               value={passOpts.separator}
                               onChange={(e) =>
@@ -4039,8 +4039,8 @@ export default function App() {
                               <option value="-">-</option>
                               <option value="_">_</option>
                               <option value=".">.</option>
-                              <option value=" ">{t("espacio")}</option>
-                              <option value="">{t("sin separador")}</option>
+                              <option value=" ">{t("space")}</option>
+                              <option value="">{t("no separator")}</option>
                             </select>
                           </label>
                           <label className="check">
@@ -4050,9 +4050,9 @@ export default function App() {
                               onChange={(e) =>
                                 setPassOpts({ ...passOpts, compatible: e.target.checked })
                               }
-                            />{t("Solo letras y números")}</label>
+                            />{t("Letters and digits only")}</label>
                           <p className="hint">
-                            {`${t("Fuerza aproximada")}: ${passBits().toFixed(0)} bits`}
+                            {`${t("Approximate strength")}: ${passBits().toFixed(0)} bits`}
                           </p>
                           <div className="settings-row">
                             <motion.button
@@ -4067,12 +4067,12 @@ export default function App() {
                                   if (target !== null) await generateInto(target);
                                 })();
                               }}
-                            >{t("Guardar y usar")}</motion.button>
+                            >{t("Save and use")}</motion.button>
                             <button
                               type="button"
                               className="ghost"
                               onClick={() => setPassFirstRun(null)}
-                            >{t("Cancelar")}</button>
+                            >{t("Cancel")}</button>
                           </div>
                         </div>
                       </div>
@@ -4100,9 +4100,9 @@ export default function App() {
                         className="login-search"
                         value={loginQuery}
                         onChange={(e) => setLoginQuery(e.target.value)}
-                        placeholder={t("Buscar sitio, usuario o dominio…")}
+                        placeholder={t("Search site, user or domain…")}
                         spellCheck={false}
-                        aria-label={t("Buscar credencial")}
+                        aria-label={t("Search credential")}
                       />
                       <motion.button
                         type="button"
@@ -4112,7 +4112,7 @@ export default function App() {
                         onClick={() =>
                           loginOpen && !loginEditPath ? closeLoginRow() : openLoginRow(null)
                         }
-                        title={t("Agregar una credencial a la lista")}
+                        title={t("Add a credential to the list")}
                       >
                         + Agregar
                       </motion.button>
@@ -4122,11 +4122,11 @@ export default function App() {
 
                     {(() => {
                       if (loginBusy && !loginRows.length) {
-                        return <p className="hint">{t("Leyendo credenciales del vault…")}</p>;
+                        return <p className="hint">{t("Reading vault credentials…")}</p>;
                       }
                       if (!loginRows.length) {
                         return (
-                          <p className="hint">{t("Sin credenciales aún. «+ Agregar» crea la primera (o importa un CSV abajo).")}</p>
+                          <p className="hint">{t("No credentials yet. «+ Add» creates the first one (or import a CSV below).")}</p>
                         );
                       }
                       const shown = loginRows.filter((r) => loginMatches(r, loginQuery));
@@ -4156,7 +4156,7 @@ export default function App() {
                                         type="button"
                                         className="ghost"
                                         disabled={busy}
-                                        title={t("Copiar usuario")}
+                                        title={t("Copy user")}
                                         onClick={() =>
                                           void onCopy({
                                             namespace: "",
@@ -4177,7 +4177,7 @@ export default function App() {
                                         type="button"
                                         className="ghost login-pass"
                                         disabled={busy}
-                                        title={t("Copiar password")}
+                                        title={t("Copy password")}
                                         onClick={() =>
                                           void onCopy({
                                             namespace: "",
@@ -4197,7 +4197,7 @@ export default function App() {
                                       type="button"
                                       className="hit-edit"
                                       disabled={busy}
-                                      title={t("Editar")}
+                                      title={t("Edit")}
                                       onClick={() => void onEditLogin(row.path)}
                                     >
                                       ✎
@@ -4212,7 +4212,7 @@ export default function App() {
                     })()}
 
                     <div className="login-csv">
-                      <p className="group-title">{t("Importar CSV")}</p>
+                      <p className="group-title">{t("Import CSV")}</p>
                       <input
                         ref={loginFileRef}
                         type="file"
@@ -4227,7 +4227,7 @@ export default function App() {
                           whileTap={tap}
                           disabled={busy}
                           onClick={() => loginFileRef.current?.click()}
-                        >{t("Elegir CSV…")}</motion.button>
+                        >{t("Choose CSV…")}</motion.button>
                         {loginFileName && <span className="hint">{loginFileName}</span>}
                       </div>
                       {loginDrafts.length > 0 && (
@@ -4238,7 +4238,7 @@ export default function App() {
                               type="checkbox"
                               checked={loginReplaceAll}
                               onChange={(e) => setLoginReplaceAll(e.target.checked)}
-                            />{t("Reemplazar path si ya existe")}</label>
+                            />{t("Replace path if it exists")}</label>
                           <div className="settings-row">
                             <motion.button
                               type="button"
@@ -4257,7 +4257,7 @@ export default function App() {
                                 setLoginFileName(null);
                                 if (loginFileRef.current) loginFileRef.current.value = "";
                               }}
-                            >{t("Limpiar")}</button>
+                            >{t("Clear")}</button>
                           </div>
                         </>
                       )}
@@ -4274,7 +4274,7 @@ export default function App() {
                     exit={{ opacity: 0 }}
                   >
                     <div className="batch-head">
-                      <div className="batch-title">{t("Servidores MCP")}</div>
+                      <div className="batch-title">{t("MCP servers")}</div>
                       <span className="badge">
                         {mcpLive?.running ?? 0}/{mcpLive?.total ?? mcpDrafts.length}
                       </span>
@@ -4282,14 +4282,14 @@ export default function App() {
                         className="icon-btn"
                         type="button"
                         onClick={() => void refreshMcp()}
-                        title={t("Releer el estado de los procesos")}
+                        title={t("Re-read process state")}
                       >
                         ↻
                       </button>
                     </div>
                     <p className="hint">
                       {mcpLive?.detail ??
-                        "Los que tengan «auto» arrancan con edgePass — y edgePass arranca al iniciar sesión, así que eso es la persistencia."}
+                        t("Rows with «auto» start with edgePass — and edgePass starts at logon, so that is the persistence.")}
                     </p>
 
                     <div className="mcp-list">
@@ -4303,12 +4303,12 @@ export default function App() {
                               <input
                                 className="mcp-field"
                                 value={row.label}
-                                placeholder={t("etiqueta del servidor (ej. mi-servidor)")}
+                                placeholder={t("server label (e.g. my-server)")}
                                 onChange={(e) => editMcp(i, { label: e.target.value })}
                               />
                               <label
                                 className="mcp-auto"
-                                title={t("Arrancar con edgePass, y edgePass arranca al iniciar sesión")}
+                                title={t("Start with edgePass, and edgePass starts at logon")}
                               >
                                 <input
                                   type="checkbox"
@@ -4321,7 +4321,7 @@ export default function App() {
                                 className="icon-btn"
                                 type="button"
                                 disabled={busy}
-                                title={t("Arrancar")}
+                                title={t("Start")}
                                 onClick={() => void mcpControl(row.id, "on")}
                               >
                                 ▶
@@ -4330,7 +4330,7 @@ export default function App() {
                                 className="icon-btn"
                                 type="button"
                                 disabled={busy}
-                                title={t("Detener")}
+                                title={t("Stop")}
                                 onClick={() => void mcpControl(row.id, "off")}
                               >
                                 ■
@@ -4339,7 +4339,7 @@ export default function App() {
                                 className="icon-btn"
                                 type="button"
                                 disabled={busy}
-                                title={t("Reiniciar")}
+                                title={t("Restart")}
                                 onClick={() => void mcpControl(row.id, "restart")}
                               >
                                 ↻
@@ -4347,7 +4347,7 @@ export default function App() {
                               <button
                                 className="icon-btn"
                                 type="button"
-                                title={t("Quitar de la lista (se aplica al guardar)")}
+                                title={t("Remove from the list (applies on save)")}
                                 onClick={() => setMcpDrafts((rows) => rows.filter((_, j) => j !== i))}
                               >
                                 ×
@@ -4358,7 +4358,7 @@ export default function App() {
                                 Antes eran cinco campos sueltos sin etiqueta: el
                                 modelo solo lo entendía quien lo escribió. */}
                             <div className="mcp-labelled">
-                              <span className="mcp-label">{t("Ejecutable")}</span>
+                              <span className="mcp-label">{t("Executable")}</span>
                               <input
                                 className="mcp-field"
                                 value={row.command}
@@ -4367,36 +4367,36 @@ export default function App() {
                               />
                             </div>
                             <div className="mcp-labelled">
-                              <span className="mcp-label">{t("Directorio")}</span>
+                              <span className="mcp-label">{t("Directory")}</span>
                               <input
                                 className="mcp-field"
                                 value={row.cwd}
-                                placeholder={t("directorio de trabajo (opcional)")}
+                                placeholder={t("working directory (optional)")}
                                 onChange={(e) => editMcp(i, { cwd: e.target.value })}
                               />
                             </div>
                             <div className="mcp-labelled">
-                              <span className="mcp-label">{t("Argumentos")}</span>
+                              <span className="mcp-label">{t("Arguments")}</span>
                               <input
                                 className="mcp-field"
                                 value={row.args.join(" ")}
-                                placeholder={t("separados por espacio")}
+                                placeholder={t("space separated")}
                                 onChange={(e) =>
                                   editMcp(i, { args: e.target.value.split(/\s+/).filter(Boolean) })
                                 }
                               />
                             </div>
                             <div className="mcp-labelled">
-                              <span className="mcp-label">{t("Imagen de contenedor")}</span>
+                              <span className="mcp-label">{t("Container image")}</span>
                               <input
                                 className="mcp-field"
                                 value={row.image}
-                                placeholder={t("ghcr.io/usuario/servidor:tag (opcional, en vez del ejecutable)")}
+                                placeholder={t("ghcr.io/user/server:tag (optional, instead of the executable)")}
                                 onChange={(e) => editMcp(i, { image: e.target.value })}
                               />
                             </div>
                             <div className="mcp-labelled">
-                              <span className="mcp-label">{t("URL pública")}</span>
+                              <span className="mcp-label">{t("Public URL")}</span>
                               <input
                                 className="mcp-field"
                                 value={row.publicUrl}
@@ -4409,12 +4409,12 @@ export default function App() {
                                 contrato de Cloudflare. Con nombre acá, edgePass
                                 arranca y para el conector junto con el server. */}
                             <div className="mcp-labelled">
-                              <span className="mcp-label">{t("Túnel nombrado")}</span>
+                              <span className="mcp-label">{t("Named tunnel")}</span>
                               <input
                                 className="mcp-field"
                                 value={row.tunnel}
-                                placeholder={t("opcional (cloudflared tunnel run …)")}
-                                title="Nombre del túnel de Cloudflare que publica este servidor. edgePass lo arranca y lo para junto con el servidor, y el LED MCP sólo dice «encendido» si el conector está conectado."
+                                placeholder={t("optional (cloudflared tunnel run …)")}
+                                title={t("Name of the Cloudflare tunnel that publishes this server. edgePass starts and stops it with the server, and the MCP LED only says «on» when the connector is connected.")}
                                 onChange={(e) => editMcp(i, { tunnel: e.target.value })}
                               />
                             </div>
@@ -4424,7 +4424,7 @@ export default function App() {
                                 <button
                                   className="icon-btn"
                                   type="button"
-                                  title={t("Copiar la URL que va en el cliente")}
+                                  title={t("Copy the client URL")}
                                   onClick={() => void invoke("copy_to_clipboard", { text: url })}
                                 >
                                   ⧉
@@ -4434,7 +4434,7 @@ export default function App() {
                                     className="pill-btn"
                                     type="button"
                                     disabled={busy}
-                                    title="Correr el comando que acuña el client id: solo el servidor puede emitirlo"
+                                    title={t("Run the command that mints the client id: only the server can issue it")}
                                     onClick={() => void mcpCredential(row.id)}
                                   >
                                     client id
@@ -4472,14 +4472,14 @@ export default function App() {
                                 <input
                                   className="mcp-field"
                                   value={entry.path}
-                                  placeholder={t("ruta en el vault (ej. personal/servidor)")}
+                                  placeholder={t("vault path (e.g. personal/server)")}
                                   spellCheck={false}
                                   onChange={(e) => editMcpSecret(i, j, { path: e.target.value })}
                                 />
                                 <input
                                   className="mcp-field mcp-field-senv"
                                   value={entry.field}
-                                  placeholder={t("CAMPO")}
+                                  placeholder={t("FIELD")}
                                   spellCheck={false}
                                   onChange={(e) => editMcpSecret(i, j, { field: e.target.value })}
                                 />
@@ -4493,13 +4493,13 @@ export default function App() {
                                     !entry.path.trim() ||
                                     !entry.field.trim()
                                   }
-                                  title="Acuñar un valor nuevo, guardarlo en OpenBao (donde dice esta fila) y mostrarlo para copiar"
+                                  title={t("Mint a new value, save it to OpenBao (at the path this row declares) and show it to copy")}
                                   onClick={() => void mcpRegenerate(row, entry.key.trim())}
-                                >{t("Regenerar")}</button>
+                                >{t("Regenerate")}</button>
                                 <button
                                   className="icon-btn"
                                   type="button"
-                                  title={t("Quitar esta variable de la fila")}
+                                  title={t("Remove this variable from the row")}
                                   onClick={() => editMcpSecret(i, j, null)}
                                 >
                                   ×
@@ -4536,7 +4536,7 @@ export default function App() {
                                 <button
                                   className="icon-btn"
                                   type="button"
-                                  title={t("Copiar el valor")}
+                                  title={t("Copy the value")}
                                   onClick={() =>
                                     void invoke("copy_to_clipboard", { text: mcpSecret.value })
                                   }
@@ -4549,7 +4549,7 @@ export default function App() {
                         );
                       })}
                       {mcpDrafts.length === 0 && (
-                        <p className="hint">{t("Todavía no hay servidores MCP. Alcanza con un ejecutable y sus argumentos, o una imagen, o una URL pública. Con «auto» el servidor arranca junto con edgePass, y eso es la persistencia.")}</p>
+                        <p className="hint">{t("No MCP servers yet. An executable and its arguments, or an image, or a public URL is enough. With «auto» the server starts with edgePass, and that is the persistence.")}</p>
                       )}
                     </div>
 
@@ -4573,16 +4573,16 @@ export default function App() {
                             setMcpJsonText(JSON.stringify(mcpDrafts, null, 2));
                           }
                         }}
-                        title={t("Pegar o copiar servidores como JSON")}
+                        title={t("Paste or copy servers as JSON")}
                       >
-                        {showMcpJson ? t("Ocultar JSON") : t("JSON")}
+                        {showMcpJson ? t("Hide JSON") : t("JSON")}
                       </button>
                       <button
                         className="pill-btn"
                         type="button"
                         disabled={busy}
                         onClick={() => void saveMcp()}
-                      >{t("Guardar")}</button>
+                      >{t("Save")}</button>
                     </div>
                     {showMcpJson && (
                       <div className="meter-json">
@@ -4612,7 +4612,7 @@ export default function App() {
                                 setMcpMsg(`JSON inválido: ${e instanceof Error ? e.message : String(e)}`);
                               }
                             }}
-                          >{t("Agregar a la lista")}</button>
+                          >{t("Add to the list")}</button>
                           <button
                             className="ghost"
                             type="button"
@@ -4625,10 +4625,10 @@ export default function App() {
                                 `${mcpDrafts.length} ${mcpDrafts.length === 1 ? "servidor copiado" : "servidores copiados"} como JSON.`,
                               );
                             }}
-                          >{t("Copiar JSON")}</button>
+                          >{t("Copy JSON")}</button>
                         </div>
                         <p className="meter-json-hint">
-                          {t("Un objeto o una lista. Campos: label, command, args, cwd, image, env, secretEnv, publicUrl, tunnel, path, autostart. Lo que falte toma el valor vacío.")}
+                          {t("One object or a list. Fields: label, command, args, cwd, image, env, secretEnv, publicUrl, tunnel, path, autostart. Anything missing takes the empty value.")}
                         </p>
                       </div>
                     )}
@@ -4666,17 +4666,17 @@ export default function App() {
                     </div>
 
                     <div className="group">
-                      <p className="group-title">{t("Acceso")}</p>
+                      <p className="group-title">{t("Access")}</p>
                       <label>
                         Init JSON
                         <input
                           value={initPath}
                           onChange={(e) => setInitPath(e.target.value)}
                           spellCheck={false}
-                          placeholder={t("ruta del init del vault (opcional)")}
+                          placeholder={t("vault init file path (optional)")}
                         />
                       </label>
-                      <label>{t("Token manual")}<input
+                      <label>{t("Manual token")}<input
                           type="password"
                           value={token}
                           onChange={(e) => setToken(e.target.value)}
@@ -4685,26 +4685,26 @@ export default function App() {
                         />
                       </label>
                       <label className="check">
-                        <input type="checkbox" checked={autoUnseal} onChange={(e) => setAutoUnseal(e.target.checked)} />{t("Auto-unseal al usar")}</label>
+                        <input type="checkbox" checked={autoUnseal} onChange={(e) => setAutoUnseal(e.target.checked)} />{t("Auto-unseal on use")}</label>
                       <label className="check">
                         <input
                           type="checkbox"
                           checked={autoLoadToken}
                           onChange={(e) => setAutoLoadToken(e.target.checked)}
-                        />{t("Cargar token del init")}</label>
+                        />{t("Load token from init")}</label>
                       <div className="settings-row">
                         <button
                           type="button"
                           className="ghost"
                           disabled={busy || !status?.hasToken}
                           onClick={onClearToken}
-                        >{t("Borrar token guardado")}</button>
+                        >{t("Delete saved token")}</button>
                       </div>
                     </div>
 
                     <div className="group">
-                      <p className="group-title">{t("Inicio")}</p>
-                      <p className="hint">{t("No es un servicio de Windows (la UI no puede vivir en Session 0): tarea al logon que espera al servicio OpenBao y lanza el widget una vez.")}</p>
+                      <p className="group-title">{t("Home")}</p>
+                      <p className="hint">{t("Not a Windows service (a UI cannot live in Session 0): a logon task that waits for the OpenBao service and launches the widget once.")}</p>
                       <div className="settings-row">
                         <button
                           type="button"
@@ -4756,25 +4756,26 @@ export default function App() {
 
                     <div className="group">
                       <p className="group-title">{t("Panel")}</p>
-                      <label>{t("Auto-colapsar sin mouse (s · 0 = nunca)")}<input
+                      <label>{t("Auto-collapse when idle (s · 0 = never)")}<input
                           type="number"
                           min={0}
                           value={autoCollapseIdleSecs}
                           onChange={(e) => setAutoCollapseIdleSecs(Number(e.target.value) || 0)}
                         />
                       </label>
-                      <p className="hint">{t("Si el puntero sale del widget expandido, vuelve a la píldora tras N segundos.")}</p>
+                      <p className="hint">{t("When the pointer leaves the expanded widget, it returns to the pill after N seconds.")}</p>
                     </div>
 
                     <div className="group">
-                      <p className="group-title">{t("Toggles del header")}</p>
-                      <p className="hint">{t("Cada botón del header es una fila: qué")}<strong>mira</strong> (estado) y qué{" "}
-                        <strong>hace</strong> al click. Todo vive en <code>config.json</code> y el
-                        catálogo lo publica Rust: un agente puede leerlo o reescribirlo por el pipe (
-                        <code>{'{"op":"toggles"}'}</code>), sin tocar código.
+                      <p className="group-title">{t("Header toggles")}</p>
+                      <p className="hint">{t("Each header button is a row: what it")} <strong>{t("watches")}</strong>{" "}
+                        {t("(state) and what it")} <strong>{t("does")}</strong>{" "}
+                        {t("on click. Everything lives in")} <code>config.json</code>{" "}
+                        {t("and Rust publishes the catalog: an agent can read or rewrite it over the pipe")} (
+                        <code>{'{"op":"toggles"}'}</code>){t(", without touching code.")}
                       </p>
                       {toggleDrafts.length === 0 && (
-                        <p className="hint">{t("Sin toggles: el header queda sin botones.")}</p>
+                        <p className="hint">{t("No toggles: the header has no buttons.")}</p>
                       )}
                       {toggleDrafts.map((row, i) => (
                         <div className="toggle-row" key={`row-${i}`}>
@@ -4786,7 +4787,7 @@ export default function App() {
                               placeholder={t("KV")}
                               spellCheck={false}
                               onChange={(e) => patchToggle(i, { label: e.target.value })}
-                              title={t("Qué dice el botón (1-4 caracteres)")}
+                              title={t("Button label (1-4 characters)")}
                             />
                             <select
                               value={row.probe}
@@ -4804,7 +4805,7 @@ export default function App() {
                               className="ghost toggle-row-btn"
                               disabled={i === 0}
                               onClick={() => moveToggle(i, -1)}
-                              title={t("Subir")}
+                              title={t("Up")}
                             >
                               ↑
                             </button>
@@ -4813,7 +4814,7 @@ export default function App() {
                               className="ghost toggle-row-btn"
                               disabled={i === toggleDrafts.length - 1}
                               onClick={() => moveToggle(i, 1)}
-                              title={t("Bajar")}
+                              title={t("Down")}
                             >
                               ↓
                             </button>
@@ -4821,17 +4822,17 @@ export default function App() {
                               type="button"
                               className="ghost toggle-row-btn"
                               onClick={() => removeToggle(i)}
-                              title={t("Quitar este toggle")}
+                              title={t("Remove this toggle")}
                             >
                               ×
                             </button>
                           </div>
                           <div className="toggle-row-sides">
-                            <label>{t("Al encender")}<select
+                            <label>{t("When turning on")}<select
                                 value={row.on}
                                 onChange={(e) => patchToggle(i, { on: e.target.value })}
                               >
-                                <option value="">— {t("solo mirar")} —</option>
+                                <option value="">— {t("read only")} —</option>
                                 {(status?.catalog.actions ?? []).map((a) => (
                                   <option key={a.id} value={a.id}>
                                     {a.id}
@@ -4839,11 +4840,11 @@ export default function App() {
                                 ))}
                               </select>
                             </label>
-                            <label>{t("Al apagar")}<select
+                            <label>{t("When turning off")}<select
                                 value={row.off}
                                 onChange={(e) => patchToggle(i, { off: e.target.value })}
                               >
-                                <option value="">— {t("solo mirar")} —</option>
+                                <option value="">— {t("read only")} —</option>
                                 {(status?.catalog.actions ?? []).map((a) => (
                                   <option key={a.id} value={a.id}>
                                     {a.id}
@@ -4851,11 +4852,11 @@ export default function App() {
                                 ))}
                               </select>
                             </label>
-                            <label>{t("Ctrl / clic derecho")}<select
+                            <label>{t("Ctrl / right click")}<select
                                 value={row.alt ?? ""}
                                 onChange={(e) => patchToggle(i, { alt: e.target.value || null })}
                               >
-                                <option value="">— sin extra —</option>
+                                <option value="">{t("— none —")}</option>
                                 {(status?.catalog.actions ?? []).map((a) => (
                                   <option key={a.id} value={a.id}>
                                     {a.id}
@@ -4890,16 +4891,16 @@ export default function App() {
                     </div>
 
                     <div className="group">
-                      <p className="group-title">{t("Servicios")}</p>
+                      <p className="group-title">{t("Services")}</p>
                       <p className="hint">
-                        {t("Lo que corre en tu máquina y el binario no conoce: una API, un contenedor, un túnel.")}{" "}
-                        {t("Cada fila publica un probe")} <code>svc.&lt;id&gt;</code>{" "}
-                        {t("con sus acciones")} <code>svc.&lt;id&gt;.on|off</code>.
+                        {t("What runs on this machine that the binary does not know about: an API, a container, a tunnel.")}{" "}
+                        {t("Each row publishes a probe")} <code>svc.&lt;id&gt;</code>{" "}
+                        {t("with its actions")} <code>svc.&lt;id&gt;.on|off</code>.
                       </p>
                       <p className="hint">
-                        {t("Dos clases de sonda:")} <code>process</code>{" "}
-                        {t("(mira la lista de procesos, no ejecuta nada) y")} <code>cmd</code>{" "}
-                        {t("(0 = encendido, 2 = apagado, 3 = ámbar; la primera línea de stdout es el tooltip).")}
+                        {t("Two probe kinds:")} <code>process</code>{" "}
+                        {t("(reads the process list, runs nothing) and")} <code>cmd</code>{" "}
+                        {t("(0 = on, 2 = off, 3 = amber; the first stdout line is the tooltip).")}
                       </p>
                       <textarea
                         className="service-json"
@@ -4908,28 +4909,28 @@ export default function App() {
                         rows={9}
                         placeholder={'[\n  { "id": "mi-api", "label": "API", "name": "mi api", "probe": { "kind": "process", "image": "mi-api.exe" } }\n]'}
                         onChange={(e) => onServiceJson(e.target.value)}
-                        aria-label={t("Servicios en JSON")}
+                        aria-label={t("Services as JSON")}
                       />
                       {serviceJsonError && (
                         <p className="hint warn">JSON inválido: {serviceJsonError}</p>
                       )}
                       <p className="hint">
                         {serviceDrafts.length === 0
-                          ? t("Sin servicios definidos.")
+                          ? t("No services defined.")
                           : `${serviceDrafts.length} servicio(s): ${serviceDrafts
                               .map((s) => (s.id ?? "").trim() || "?")
                               .join(", ")}`}
                       </p>
                       {serviceDrafts.length > (status?.catalog.maxToggles ?? 8) && (
                         <p className="hint warn">
-                          {t("El header muestra hasta")}{" "}
+                          {t("The header shows up to")}{" "}
                           {status?.catalog.maxToggles ?? 8}{" "}
-                          {t("LEDs; un servicio sin LED no se consulta.")}
+                          {t("LEDs; a service without a LED is not probed.")}
                         </p>
                       )}
                       <div className="settings-row">
                         <button type="button" className="ghost" onClick={addServiceTemplate}>
-                          ＋ {t("Agregar ejemplo")}
+                          ＋ {t("Add example")}
                         </button>
                         <button
                           type="button"
@@ -4937,15 +4938,15 @@ export default function App() {
                           onClick={() => setServiceList([])}
                           disabled={serviceDrafts.length === 0}
                         >
-                          {t("Vaciar")}
+                          {t("Empty")}
                         </button>
-                        <span className="hint">{t("se aplican al guardar")}</span>
+                        <span className="hint">{t("applies on save")}</span>
                       </div>
                     </div>
 
                     <div className="group">
-                      <p className="group-title">{t("Sincronización")}</p>
-                      <label>{t("Auto-sellar tras idle (s · 0 = nunca)")}<input
+                      <p className="group-title">{t("Sync")}</p>
+                      <label>{t("Auto-seal after idle (s · 0 = never)")}<input
                           type="number"
                           min={0}
                           value={autoSealIdleSecs}
@@ -4957,16 +4958,16 @@ export default function App() {
                         debería pasar cuando tú lo pides.
                       </p>
                       <label className="check">
-                        <input type="checkbox" checked={autoSync} onChange={(e) => setAutoSync(e.target.checked)} />{t("Reindexar al abrir")}</label>
+                        <input type="checkbox" checked={autoSync} onChange={(e) => setAutoSync(e.target.checked)} />{t("Reindex on open")}</label>
                     </div>
 
                     <div className="group">
-                      <p className="group-title">{t("Contraseñas sugeridas")}</p>
+                      <p className="group-title">{t("Suggested passwords")}</p>
                       <p className="hint">
-                        {t("Cómo se arma la frase que sugiere el botón ✦ del Meter. Se pregunta una vez y se guarda.")}
+                        {t("How the phrase suggested by the Batch tab's ✦ button is built. Asked once, then saved.")}
                       </p>
                       <label>
-                        {t("Palabras")}
+                        {t("Words")}
                         <select
                           value={passOpts.words}
                           onChange={(e) =>
@@ -4979,7 +4980,7 @@ export default function App() {
                         </select>
                       </label>
                       <label>
-                        {t("Aleatorio")}
+                        {t("Random")}
                         <select
                           value={passOpts.randomChars}
                           onChange={(e) =>
@@ -4992,10 +4993,10 @@ export default function App() {
                         </select>
                       </label>
                       <p className="hint">
-                        {t("Caracteres frescos por frase; no se guardan. El salt de instalación solo diversifica entre máquinas.")}
+                        {t("Fresh characters per phrase; they are not stored. The install salt only diversifies across machines.")}
                       </p>
                       <label>
-                        {t("Separador")}
+                        {t("Separator")}
                         <select
                           value={passOpts.separator}
                           onChange={(e) => setPassOpts({ ...passOpts, separator: e.target.value })}
@@ -5003,8 +5004,8 @@ export default function App() {
                           <option value="-">-</option>
                           <option value="_">_</option>
                           <option value=".">.</option>
-                          <option value=" ">{t("espacio")}</option>
-                          <option value="">{t("sin separador")}</option>
+                          <option value=" ">{t("space")}</option>
+                          <option value="">{t("no separator")}</option>
                         </select>
                       </label>
                       <label className="check">
@@ -5012,28 +5013,28 @@ export default function App() {
                           type="checkbox"
                           checked={passOpts.capitalize}
                           onChange={(e) => setPassOpts({ ...passOpts, capitalize: e.target.checked })}
-                        />{t("Mayúsculas")}</label>
+                        />{t("Capitalize")}</label>
                       <label className="check">
                         <input
                           type="checkbox"
                           checked={passOpts.digits}
                           onChange={(e) => setPassOpts({ ...passOpts, digits: e.target.checked })}
-                        />{t("Dígitos")}</label>
+                        />{t("Digits")}</label>
                       <label className="check">
                         <input
                           type="checkbox"
                           checked={passOpts.symbol}
                           disabled={passOpts.compatible}
                           onChange={(e) => setPassOpts({ ...passOpts, symbol: e.target.checked })}
-                        />{t("Símbolo")}</label>
+                        />{t("Symbol")}</label>
                       <label className="check">
                         <input
                           type="checkbox"
                           checked={passOpts.compatible}
                           onChange={(e) => setPassOpts({ ...passOpts, compatible: e.target.checked })}
-                        />{t("Solo letras y números")}</label>
+                        />{t("Letters and digits only")}</label>
                       <p className="hint">
-                        {`${t("Fuerza aproximada")}: ${passBits().toFixed(0)} bits`}
+                        {`${t("Approximate strength")}: ${passBits().toFixed(0)} bits`}
                         {passNote ? ` · ${passNote}` : ""}
                       </p>
                       <div className="settings-row">
@@ -5042,7 +5043,7 @@ export default function App() {
                           className="primary"
                           whileTap={tap}
                           onClick={() => void onSavePassphrase()}
-                        >{passConfigured ? t("Guardar estilo") : t("Guardar y usar")}</motion.button>
+                        >{passConfigured ? t("Save style") : t("Save and use")}</motion.button>
                       </div>
                     </div>
 
@@ -5055,8 +5056,8 @@ export default function App() {
                         disabled={busy}
                         whileTap={tap}
                         onClick={onSaveSettings}
-                      >{t("Guardar")}</motion.button>
-                      <button type="button" className="ghost" disabled={busy} onClick={bootstrap}>{t("Reconectar")}</button>
+                      >{t("Save")}</motion.button>
+                      <button type="button" className="ghost" disabled={busy} onClick={bootstrap}>{t("Reconnect")}</button>
                     </div>
                   </motion.section>
                 )}
@@ -5070,7 +5071,7 @@ export default function App() {
                     exit={{ opacity: 0, y: -4 }}
                     transition={spring.content}
                   >
-                    <p className="hint">{t("Lo que un agente externo dejó en disco: el hook del servidor MCP (lo que escribe por el tablero) y el vigilante de la carpeta (una nota copiada a mano, un archivo restaurado). El contador son las que todavía no marcaste como vistas.")}</p>
+                    <p className="hint">{t("What an outside agent left on disk: the MCP server hook (what it writes) and the folder watcher (a note copied by hand, a restored file). The counter is what you have not marked as seen yet.")}</p>
                     <div className="settings-row notices-head">
                       <span className="badge">{notices?.unseen ?? 0} sin ver</span>
                       <span className="notice-total">
@@ -5085,8 +5086,8 @@ export default function App() {
                         whileTap={tap}
                         disabled={!notices?.unseen}
                         onClick={() => void markNoticesSeen()}
-                      >{t("Marcar todo como visto")}</motion.button>
-                      <button type="button" className="ghost" onClick={() => void openNotices()}>{t("Actualizar")}</button>
+                      >{t("Mark all as seen")}</motion.button>
+                      <button type="button" className="ghost" onClick={() => void openNotices()}>{t("Update")}</button>
                     </div>
                     <ul className="notice-rows">
                       {(notices?.items ?? []).map((notice, i) => (
@@ -5114,7 +5115,7 @@ export default function App() {
                             type="button"
                             className="icon-btn"
                             title={notice.path}
-                            aria-label={t("Copiar la ruta")}
+                            aria-label={t("Copy the path")}
                             onClick={() => void copyNoticePath(notice.path)}
                           >
                             ⧉
@@ -5122,7 +5123,7 @@ export default function App() {
                         </li>
                       ))}
                       {!notices?.items.length && (
-                        <li className="notice-empty">{t("Todavía no hay avisos. Aparecen solos cuando un agente externo escribe.")}</li>
+                        <li className="notice-empty">{t("No notices yet. They appear by themselves when an outside agent writes.")}</li>
                       )}
                     </ul>
                   </motion.section>
@@ -5137,7 +5138,7 @@ export default function App() {
                     exit={{ opacity: 0, y: -4 }}
                     transition={spring.content}
                   >
-                    <p className="hint">{t("Qué binario corre, qué log escribe y qué ve del vault. Es lo primero que hace falta cuando algo no arranca.")}</p>
+                    <p className="hint">{t("Which binary runs, which log it writes and what it sees of the vault. It is the first thing you need when something does not start.")}</p>
                     {diag ? (
                       <>
                         <dl className="diag-rows">
@@ -5172,7 +5173,7 @@ export default function App() {
                             </dd>
                           </div>
                           <div className="diag-row">
-                            <dt>servicio</dt>
+                            <dt>{t("service")}</dt>
                             <dd>{diag.service.state}</dd>
                           </div>
                           <div className="diag-row">
@@ -5196,20 +5197,20 @@ export default function App() {
                             <dd>{diag.logPath}</dd>
                           </div>
                         </dl>
-                        <p className="group-title">{t("Últimas líneas del log")}</p>
+                        <p className="group-title">{t("Last log lines")}</p>
                         <label className="check">
                           <input
                             type="checkbox"
                             checked={showLogNoise}
                             onChange={(e) => setShowLogNoise(e.target.checked)}
-                          />{t("Incluir el vigilante de acople")}</label>
+                          />{t("Include the dock watcher")}</label>
                         <pre className="diag-log">
                           {(showLogNoise ? diag.logTail : withoutDockNoise(diag.logTail)) ||
-                            "(vacío)"}
+                            t("(empty)")}
                         </pre>
                       </>
                     ) : (
-                      <p className="hint">{t("Leyendo…")}</p>
+                      <p className="hint">{t("Reading…")}</p>
                     )}
                     <div className="settings-row">
                       <motion.button
@@ -5218,8 +5219,8 @@ export default function App() {
                         disabled={!diag}
                         whileTap={tap}
                         onClick={copyReport}
-                      >{t("Copiar informe")}</motion.button>
-                      <button type="button" className="ghost" disabled={busy} onClick={openDiag}>{t("Refrescar")}</button>
+                      >{t("Copy report")}</motion.button>
+                      <button type="button" className="ghost" disabled={busy} onClick={openDiag}>{t("Refresh")}</button>
                     </div>
 
                     {/* Two steps on purpose: the widget has no taskbar button and
@@ -5244,12 +5245,12 @@ export default function App() {
                           }
                         }}
                       >
-                        {confirmQuit ? "¿Seguro? Salir ahora" : "Salir de edgePass"}
+                        {confirmQuit ? t("Sure? Quit now") : t("Quit edgePass")}
                       </button>
                       <span className="hint">
                         {confirmQuit
-                          ? "Esc para cancelar."
-                          : "Cierra el widget. El vault sigue como esté."}
+                          ? t("Esc to cancel.")
+                          : t("Closes the widget. The vault stays as it is.")}
                       </span>
                     </div>
                   </motion.section>
@@ -5323,7 +5324,7 @@ export default function App() {
                   whileHover={{ scale: grantBusy ? 1 : 1.02 }}
                   whileTap={{ scale: grantBusy ? 1 : 0.98 }}
                   onClick={() => void onGrantDecision("deny")}
-                >{t("Rechazar")}</motion.button>
+                >{t("Deny")}</motion.button>
                 <motion.button
                   className="openbao-prompt-btn ghost"
                   type="button"
@@ -5377,8 +5378,8 @@ export default function App() {
                 </svg>
               </div>
               <div className="openbao-prompt-text">
-                <div className="openbao-prompt-title" id="openbao-prompt-title">{t("OpenBao no está corriendo")}</div>
-                <div className="openbao-prompt-desc">{t("El servicio de OpenBao está detenido. ¿Quieres que edgePass lo arranque?")}</div>
+                <div className="openbao-prompt-title" id="openbao-prompt-title">{t("OpenBao is not running")}</div>
+                <div className="openbao-prompt-desc">{t("The OpenBao service is stopped. Do you want edgePass to start it?")}</div>
               </div>
               <div className="openbao-prompt-actions">
                 <motion.button
@@ -5397,7 +5398,7 @@ export default function App() {
                   onClick={() => setShowOpenBaoPrompt(false)}
                   whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
-                >{t("No, gracias")}</motion.button>
+                >{t("No, thanks")}</motion.button>
               </div>
             </motion.div>
           </motion.div>

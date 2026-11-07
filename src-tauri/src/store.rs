@@ -16,8 +16,8 @@ pub struct SearchHit {
     pub key: String,
     pub use_count: i64,
     pub last_used_at: Option<String>,
-    /// Cuántas notas tiene su path (autogeneradas y escritas a mano). El valor
-    /// nunca sale de acá: sólo la referencia.
+    /// How many notes its path has (auto-generated and hand-written). The value
+    /// never leaves here: only the reference.
     pub notes: i64,
     pub score: f64,
 }
@@ -26,12 +26,13 @@ pub struct Store {
     conn: Connection,
 }
 
-/// Una nota ligada a un secreto — o al path entero, cuando `key` viene vacío.
+/// A note tied to a secret — or to the whole path, when `key` comes in empty.
 ///
-/// Vive en esta base y **no** en OpenBao a propósito: el vault guarda valores y
-/// su metadata es del motor KV; meterle comentarios obliga a reescribir la
-/// versión, ensucia el path y en KV v1 ni existe. Acá sólo se guarda la
-/// *referencia* (`namespace`, `path`, `key`), nunca el valor.
+/// It lives in this database and **not** in OpenBao on purpose: the vault stores
+/// values and its metadata belongs to the KV engine; stuffing comments in there
+/// forces a version rewrite, dirties the path and does not even exist in KV v1.
+/// Here only the *reference* is stored (`namespace`, `path`, `key`), never the
+/// value.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Note {
@@ -40,16 +41,16 @@ pub struct Note {
     pub path: String,
     pub key: String,
     pub body: String,
-    /// `auto` = la escribió edgePass al entregar el secreto · `user` = humana o
-    /// del agente.
+    /// `auto` = edgePass wrote it when delivering the secret · `user` = human or
+    /// agent.
     pub kind: String,
-    /// Quién la pidió: `ui`, `pipe`, el nombre del tool, la sesión…
+    /// Who asked for it: `ui`, `pipe`, the tool name, the session…
     pub actor: String,
     pub created_at: String,
 }
 
-/// Cuántas notas se conservan por path. Un historial de accesos sin tope crece
-/// para siempre y termina siendo un log, no una nota.
+/// How many notes are kept per path. An access history with no cap grows
+/// forever and ends up being a log, not a note.
 pub const NOTES_PER_PATH: usize = 50;
 
 impl Store {
@@ -97,7 +98,7 @@ impl Store {
             .map_err(|e| e.to_string())
     }
 
-    /// Escribe una nota. `body` vacío no se guarda: una nota sin texto es ruido.
+    /// Writes a note. An empty `body` is not stored: a note with no text is noise.
     pub fn add_note(
         &self,
         namespace: &str,
@@ -109,7 +110,7 @@ impl Store {
     ) -> Result<i64, String> {
         let body = body.trim();
         if body.is_empty() {
-            return Err("una nota vacía no se guarda".into());
+            return Err("an empty note is not stored".into());
         }
         let created = Utc::now().to_rfc3339();
         self.conn
@@ -132,7 +133,7 @@ impl Store {
         Ok(id)
     }
 
-    /// Las últimas notas de un path, de la más nueva a la más vieja.
+    /// The last notes of a path, newest to oldest.
     pub fn notes_for(
         &self,
         namespace: &str,
@@ -175,8 +176,8 @@ impl Store {
         rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
     }
 
-    /// Cuántas notas tiene cada path de un namespace — lo que pinta el contador
-    /// en la lista de secretos, en una sola consulta.
+    /// How many notes each path in a namespace has — what paints the counter
+    /// in the secret list, in a single query.
     pub fn note_counts(&self, namespace: &str) -> Result<Vec<(String, i64)>, String> {
         let mut stmt = self
             .conn
@@ -192,7 +193,7 @@ impl Store {
         rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
     }
 
-    /// Deja las últimas [`NOTES_PER_PATH`] de ese path y borra el resto.
+    /// Keeps the last [`NOTES_PER_PATH`] of that path and deletes the rest.
     fn prune_notes(&self, namespace: &str, path: &str) -> Result<(), String> {
         self.conn
             .execute(
@@ -543,7 +544,7 @@ mod tests {
             .expect("search")
             .is_empty());
         // A term that matches nothing at all is still empty, not an error.
-        assert!(s.search("zzzz-nada", 80).expect("search").is_empty());
+        assert!(s.search("zzzz-nothing", 80).expect("search").is_empty());
     }
 
     #[test]

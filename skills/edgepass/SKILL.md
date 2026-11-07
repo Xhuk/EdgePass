@@ -86,7 +86,7 @@ The reply carries `{ok, id, namespace, path}`: **names only**. The widget opens 
 form, reads the path with its own token, and fills the rows. Values mask after a few
 seconds. Tell the human where to look, never what the value is.
 
-If the reply says `ambiguo`, the query matched several paths. Show the candidates and
+If the reply says `ambiguous`, the query matched several paths. Show the candidates and
 retry with an explicit `path`.
 
 ## `run` — use a secret without seeing it
@@ -157,9 +157,9 @@ object, then verify in a later call.
 
 | Symptom | Meaning |
 |---|---|
-| `{"ok":false,"error":"json invalido"}` | more than one line, or broken quotes |
-| `meter` → `ambiguo` | several paths match; retry with an explicit path |
-| `meter` → `sin coincidencias` | stale index: run `sync_index`, then retry |
+| `{"ok":false,"error":"invalid json"}` | more than one line, or broken quotes |
+| `meter` → `ambiguous` | several paths match; retry with an explicit path |
+| `meter` → `no matches in the local index` | stale index: run `sync_index`, then retry |
 | `run` → `{"ok":false,"sealed":true}` | the vault is sealed; unseal, or ask the human |
 | `run` → `run slots full` | four detached runs are alive; cancel one |
 | `request` stays `pending` | the human did not see the popup; do not invent a result |

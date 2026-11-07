@@ -70,19 +70,19 @@ pub fn parse(args: &[String]) -> Command {
 
 pub fn help() -> &'static str {
     "\
-edgepass — widget de secretos sobre OpenBao
+edgepass — secrets widget on top of OpenBao
 
-Uso:
-  edgepass                       abre el widget
-  edgepass init [--dir DIR]      escribe config.yaml (no toca una que ya exista)
-  edgepass validate [ARCHIVO]    valida el esquema, los LEDs y los servidores MCP
-  edgepass doctor                recorre la cadena y dice qué eslabón falta
-  edgepass migrate [--config F]  convierte config.json a config.yaml
+Usage:
+  edgepass                       opens the widget
+  edgepass init [--dir DIR]      writes config.yaml (never touches an existing one)
+  edgepass validate [FILE]       validates the schema, the LEDs and the MCP servers
+  edgepass doctor                walks the chain and names the missing link
+  edgepass migrate [--config F]  converts config.json to config.yaml
   edgepass --version
 
-Variables de entorno: EDGEPASS_* (ver docs/CONFIG.md).
-OpenBao es opcional para abrir el widget y obligatorio para las features de
-secreto: sin vault alcanzable, los LEDs que lo necesitan quedan ámbar."
+Environment variables: EDGEPASS_* (see docs/CONFIG.md).
+OpenBao is optional to open the widget and required for the secret features:
+without a reachable vault, the LEDs that need it stay amber."
 }
 
 #[cfg(windows)]
@@ -90,9 +90,9 @@ fn attach_console() {
     use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
     use windows_sys::Win32::System::Console::{AttachConsole, GetStdHandle, ATTACH_PARENT_PROCESS, STD_OUTPUT_HANDLE};
 
-    // Sólo cuando no hay ninguna salida. Si alguien redirigió (`| more`, `> out`,
-    // CI) el handle es válido y AttachConsole se la robaría al padre: la salida
-    // terminaría en la ventana de la consola en vez de en el pipe.
+    // Only when there is no output at all. If someone redirected (`| more`, `> out`,
+    // CI) the handle is valid and AttachConsole would steal it from the parent: the
+    // output would end up in the console window instead of the pipe.
     let stdout = unsafe { GetStdHandle(STD_OUTPUT_HANDLE) };
     if stdout.is_null() || stdout == INVALID_HANDLE_VALUE {
         unsafe {
@@ -153,18 +153,18 @@ fn init(dir: Option<&Path>, force: bool) -> Result<(), String> {
     let path = init_target(dir)?;
     if path.exists() && !force {
         return Err(format!(
-            "ya existe {} · usá --force para sobrescribirla",
+            "{} already exists · use --force to overwrite it",
             path.display()
         ));
     }
     let cfg = AppConfig::default();
     config::save_config_at(&cfg, &path)?;
-    println!("config escrita en {}", path.display());
+    println!("config written to {}", path.display());
     println!();
-    println!("Siguiente paso:");
-    println!("  edgepass doctor      # qué falta (OpenBao, servidores MCP, túnel)");
+    println!("Next step:");
+    println!("  edgepass doctor      # what is missing (OpenBao, MCP servers, tunnel)");
     if path.file_name().map(|n| n != "config.yaml").unwrap_or(false) {
-        println!("  (el widget abrirá esta carpeta, no ese archivo: movela a {})", config::data_dir()?.join("config.yaml").display());
+        println!("  (the widget will open this folder, not that file: move it to {})", config::data_dir()?.join("config.yaml").display());
     }
     Ok(())
 }
@@ -179,34 +179,34 @@ fn validate(file: Option<&Path>) -> Result<(), String> {
     };
     if !path.exists() {
         return Err(format!(
-            "no existe {} · corré `edgepass init`",
+            "{} does not exist · run `edgepass init`",
             path.display()
         ));
     }
     let cfg = config::load_config_at(&path)?;
-    println!("archivo    {}", path.display());
-    println!("formato    {}", if is_yaml(&path) { "YAML" } else { "JSON" });
-    println!("versión    {}", cfg.config_version);
+    println!("file       {}", path.display());
+    println!("format     {}", if is_yaml(&path) { "YAML" } else { "JSON" });
+    println!("version    {}", cfg.config_version);
 
     // The LEDs: ids against the published catalog, the count, the labels.
     let toggles = crate::toggles::validate(&cfg, cfg.toggles.clone())?;
     println!("LEDs       {}", toggles.len());
     for t in &toggles {
-        let on = if t.on.is_empty() { "solo mirar" } else { t.on.as_str() };
-        let off = if t.off.is_empty() { "solo mirar" } else { t.off.as_str() };
+        let on = if t.on.is_empty() { "read only" } else { t.on.as_str() };
+        let off = if t.off.is_empty() { "read only" } else { t.off.as_str() };
         println!("  {:<4} {} → {} / {}", t.label, t.probe, on, off);
     }
 
     // The MCP list: a row without a command is the classic half-configured row.
     if cfg.mcp_servers.is_empty() {
-        println!("MCP        (ninguno)");
+        println!("MCP        (none)");
     } else {
         println!("MCP        {}", cfg.mcp_servers.len());
         for s in &cfg.mcp_servers {
             let tunnel = if s.tunnel.is_empty() {
                 String::new()
             } else {
-                format!(" · túnel {}", s.tunnel)
+                format!(" · tunnel {}", s.tunnel)
             };
             println!("  {:<12} {}{}", s.label, s.command, tunnel);
         }
@@ -239,19 +239,19 @@ fn migrate(file: Option<&Path>) -> Result<(), String> {
             let json = dir.join("config.json");
             json.exists().then_some(json)
         })
-        .ok_or_else(|| format!("no hay config.json que migrar en {}", dir.display()))?;
+        .ok_or_else(|| format!("there is no config.json to migrate in {}", dir.display()))?;
     let target = dir.join("config.yaml");
     let cfg = config::load_config_at(&source)?;
     if target.exists() {
         return Err(format!(
-            "ya existe {} · movelo o borralo primero",
+            "{} already exists · move it or delete it first",
             target.display()
         ));
     }
     config::save_config_at(&cfg, &target)?;
     println!("{} → {}", source.display(), target.display());
     println!(
-        "El .json queda intacto; el widget abrirá el .yaml desde el próximo arranque."
+        "The .json stays untouched; the widget will open the .yaml from the next start."
     );
     Ok(())
 }
@@ -267,7 +267,7 @@ fn doctor() -> Result<(), String> {
         if !ok {
             problems += 1;
         }
-        println!("  [{}] {:<28} {}", if ok { "OK  " } else { "FALLA" }, name, detail);
+        println!("  [{}] {:<28} {}", if ok { "OK  " } else { "FAIL" }, name, detail);
     };
 
     println!("edgePass doctor");
@@ -277,20 +277,20 @@ fn doctor() -> Result<(), String> {
         Ok(c) => {
             say(
                 true,
-                "configuración",
+                "config",
                 format!("{} (v{})", path.display(), c.config_version),
             );
             c
         }
         Err(e) => {
-            say(false, "configuración", format!("{e} · corré `edgepass init`"));
+            say(false, "config", format!("{e} · run `edgepass init`"));
             println!("-----------------------------------------");
-            println!("{problems} problema(s).");
+            println!("{problems} problem(s).");
             return Ok(());
         }
     };
 
-    // 1. El vault: opcional para abrir, obligatorio para secretos.
+    // 1. The vault: optional to open, required for secrets.
     let seal = {
         // Its own single-threaded runtime: the CLI must not depend on Tauri's
         // async runtime being up, because it never starts an app.
@@ -303,29 +303,29 @@ fn doctor() -> Result<(), String> {
     if !seal.reachable {
         say(
             false,
-            "OpenBao alcanzable",
+            "OpenBao reachable",
             format!(
-                "no responde en {} · opcional para abrir el widget, obligatorio para secretos (https://openbao.org)",
+                "not answering on {} · optional to open the widget, required for secrets (https://openbao.org)",
                 cfg.bao_addr
             ),
         );
     } else {
-        say(true, "OpenBao alcanzable", cfg.bao_addr.clone());
+        say(true, "OpenBao reachable", cfg.bao_addr.clone());
         say(
             !seal.sealed,
-            "vault abierto",
+            "vault open",
             if seal.sealed {
-                "sellado: abrí con el LED KV o `edgepass` → KV".to_string()
+                "sealed: open it with the KV LED or `edgepass` → KV".to_string()
             } else {
                 "unsealed".to_string()
             },
         );
     }
 
-    // 2. Cada fila MCP: binario, proceso y — si declara túnel — conector.
+    // 2. Each MCP row: binary, process and — if it declares a tunnel — connector.
     let status = mcp::status_now(&cfg);
     if status.total == 0 {
-        say(true, "servidores MCP", "(ninguno configurado)".to_string());
+        say(true, "MCP servers", "(none configured)".to_string());
     } else {
         for row in &status.servers {
             say(
@@ -336,28 +336,28 @@ fn doctor() -> Result<(), String> {
             if !row.spec.tunnel.is_empty() {
                 say(
                     row.tunnel_running,
-                    &format!("túnel {}", row.spec.tunnel),
+                    &format!("tunnel {}", row.spec.tunnel),
                     if row.tunnel_running {
-                        "conector arriba".to_string()
+                        "connector up".to_string()
                     } else {
-                        format!("parado · `cloudflared tunnel run {}`", row.spec.tunnel)
+                        format!("stopped · `cloudflared tunnel run {}`", row.spec.tunnel)
                     },
                 );
             }
         }
     }
 
-    // 3. Los LEDs: que el vocabulario exista y que la config no pida un id raro.
+    // 3. The LEDs: that the vocabulary exists and that the config does not ask for an odd id.
     match crate::toggles::validate(&cfg, cfg.toggles.clone()) {
-        Ok(list) => say(true, "LEDs", format!("{} en el header", list.len())),
+        Ok(list) => say(true, "LEDs", format!("{} in the header", list.len())),
         Err(e) => say(false, "LEDs", e),
     }
 
     println!("-----------------------------------------");
     if problems == 0 {
-        println!("Todo en orden.");
+        println!("Everything in order.");
     } else {
-        println!("{problems} problema(s) — ver arriba.");
+        println!("{problems} problem(s) — see above.");
     }
     Ok(())
 }

@@ -273,7 +273,7 @@ pub fn probe_now(probe: &ServiceProbe) -> ServiceState {
 fn process_state(image: &str, matcher: Option<&str>) -> ServiceState {
     let image = normalize_image(image);
     if image.is_empty() {
-        return ServiceState::broken("falta 'image' en el probe".into());
+        return ServiceState::broken("missing 'image' in the probe".into());
     }
     let matcher = matcher.map(str::trim).filter(|m| !m.is_empty());
     match pids_of(&image, matcher) {
@@ -282,11 +282,11 @@ fn process_state(image: &str, matcher: Option<&str>) -> ServiceState {
                 Some(m) => format!("{image} · «{m}»"),
                 None => image,
             };
-            ServiceState::up(format!("corriendo (pid {}) · {what}", pids[0]))
+            ServiceState::up(format!("running (pid {}) · {what}", pids[0]))
         }
         Ok(_) => ServiceState::down(match matcher {
-            Some(m) => format!("parado · no hay {image} con «{m}»"),
-            None => format!("parado · no hay {image}"),
+            Some(m) => format!("stopped · no {image} with «{m}»"),
+            None => format!("stopped · no {image}"),
         }),
         Err(e) => ServiceState::broken(e),
     }
@@ -294,7 +294,7 @@ fn process_state(image: &str, matcher: Option<&str>) -> ServiceState {
 
 fn cmd_state(cmd: &[String], cwd: &str) -> ServiceState {
     let Some(program) = cmd.first() else {
-        return ServiceState::broken("el probe 'cmd' está vacío".into());
+        return ServiceState::broken("the 'cmd' probe is empty".into());
     };
     let dir = if cwd.trim().is_empty() {
         None
@@ -311,11 +311,11 @@ fn cmd_state(cmd: &[String], cwd: &str) -> ServiceState {
     );
     let run = match run {
         Ok(r) => r,
-        Err(e) => return ServiceState::broken(format!("no pude ejecutar {program}: {e}")),
+        Err(e) => return ServiceState::broken(format!("could not run {program}: {e}")),
     };
     if run.timed_out {
         return ServiceState::broken(format!(
-            "el probe no respondió en {}s",
+            "the probe did not answer within {}s",
             PROBE_TIMEOUT.as_secs()
         ));
     }
@@ -324,26 +324,26 @@ fn cmd_state(cmd: &[String], cwd: &str) -> ServiceState {
         .unwrap_or_default();
     match run.code {
         Some(0) => ServiceState::up(if said.is_empty() {
-            "corriendo".into()
+            "running".into()
         } else {
             said
         }),
         Some(2) => ServiceState::down(if said.is_empty() {
-            "parado".into()
+            "stopped".into()
         } else {
             said
         }),
         Some(3) => ServiceState::broken(if said.is_empty() {
-            "instalado pero roto".into()
+            "installed but broken".into()
         } else {
             said
         }),
         Some(code) => ServiceState::broken(if said.is_empty() {
-            format!("el probe salió con código {code}")
+            format!("the probe exited with code {code}")
         } else {
             said
         }),
-        None => ServiceState::broken("el probe no devolvió un código".into()),
+        None => ServiceState::broken("the probe returned no exit code".into()),
     }
 }
 
@@ -358,14 +358,14 @@ pub fn run_action(
         .services
         .iter()
         .find(|s| s.id == id)
-        .ok_or_else(|| format!("servicio desconocido: '{id}'"))?;
+        .ok_or_else(|| format!("unknown service: '{id}'"))?;
     let action = match side {
         Side::On => spec.actions.on.as_ref(),
         Side::Off => spec.actions.off.as_ref(),
     }
-    .ok_or_else(|| format!("'{}' no tiene acción {side}", spec.title()))?;
+    .ok_or_else(|| format!("'{}' has no {side} action", spec.title()))?;
     if action.cmd.is_empty() {
-        return Err(format!("la acción {side} de '{}' está vacía", spec.title()));
+        return Err(format!("the {side} action of '{}' is empty", spec.title()));
     }
     let program = action.cmd[0].clone();
     let args = action.cmd[1..].to_vec();
@@ -381,18 +381,18 @@ pub fn run_action(
     )?;
     if run.timed_out {
         return Err(format!(
-            "la acción {side} no terminó en {}s",
+            "the {side} action did not finish within {}s",
             timeout.as_secs()
         ));
     }
     let said = first_line(&run.stdout).or_else(|| first_line(&run.stderr));
     match run.code {
-        Some(0) => Ok(said.unwrap_or_else(|| format!("acción {side} ejecutada"))),
+        Some(0) => Ok(said.unwrap_or_else(|| format!("{side} action ran"))),
         Some(code) => Err(match said {
-            Some(s) => format!("la acción {side} falló (código {code}): {s}"),
-            None => format!("la acción {side} falló (código {code})"),
+            Some(s) => format!("the {side} action failed (code {code}): {s}"),
+            None => format!("the {side} action failed (code {code})"),
         }),
-        None => Err(format!("la acción {side} no devolvió un código")),
+        None => Err(format!("the {side} action returned no exit code")),
     }
 }
 
@@ -417,7 +417,7 @@ impl std::fmt::Display for Side {
 pub fn validate(list: Vec<ServiceSpec>) -> Result<Vec<ServiceSpec>, String> {
     if list.len() > MAX_SERVICES {
         return Err(format!(
-            "máximo {MAX_SERVICES} servicios (llegaron {})",
+            "at most {MAX_SERVICES} services (got {})",
             list.len()
         ));
     }
@@ -437,7 +437,7 @@ pub fn validate(list: Vec<ServiceSpec>) -> Result<Vec<ServiceSpec>, String> {
                     .collect();
                 a.cwd = a.cwd.trim().to_string();
                 if a.cmd.is_empty() {
-                    return Err(format!("la acción {side} de '{title}' no tiene comando"));
+                    return Err(format!("the {side} action of '{title}' has no command"));
                 }
             }
         }
@@ -445,7 +445,7 @@ pub fn validate(list: Vec<ServiceSpec>) -> Result<Vec<ServiceSpec>, String> {
             ServiceProbe::Process { image, matcher } => {
                 *image = image.trim().to_string();
                 if image.is_empty() {
-                    return Err(format!("el servicio '{title}' necesita 'probe.image'"));
+                    return Err(format!("the service '{title}' needs 'probe.image'"));
                 }
                 if let Some(m) = matcher {
                     *m = m.trim().to_string();
@@ -462,7 +462,7 @@ pub fn validate(list: Vec<ServiceSpec>) -> Result<Vec<ServiceSpec>, String> {
                     .collect();
                 *cwd = cwd.trim().to_string();
                 if cmd.is_empty() {
-                    return Err(format!("el servicio '{title}' necesita 'probe.cmd'"));
+                    return Err(format!("the service '{title}' needs 'probe.cmd'"));
                 }
             }
         }
@@ -514,7 +514,7 @@ fn first_line(bytes: &[u8]) -> Option<String> {
         .to_string();
     let capped: String = line.chars().take(MAX_DETAIL).collect();
     if crate::ipc::looks_like_secret_output(&capped) {
-        return Some("la salida del probe parecía un secreto y se descartó".into());
+        return Some("the probe output looked like a secret and was discarded".into());
     }
     Some(capped)
 }
@@ -546,7 +546,7 @@ fn pids_of(image: &str, matcher: Option<&str>) -> Result<Vec<u32>, String> {
     #[cfg(not(windows))]
     {
         let _ = (image, matcher);
-        Err("este build no puede leer la lista de procesos en esta plataforma".into())
+        Err("this build cannot read the process list on this platform".into())
     }
 }
 
@@ -557,7 +557,7 @@ fn tasklist_pids(image: &str) -> Result<Vec<u32>, String> {
     cmd.creation_flags(CREATE_NO_WINDOW);
     let out = cmd
         .output()
-        .map_err(|e| format!("no pude leer la lista de procesos: {e}"))?;
+        .map_err(|e| format!("could not read the process list: {e}"))?;
     let text = String::from_utf8_lossy(&out.stdout);
     let want = image.to_ascii_lowercase();
     let mut pids = Vec::new();
@@ -598,9 +598,9 @@ fn cim_pids(image: &str, matcher: &str) -> Result<Vec<u32>, String> {
     cmd.creation_flags(CREATE_NO_WINDOW);
     let out = cmd
         .output()
-        .map_err(|e| format!("no pude leer la lista de procesos: {e}"))?;
+        .map_err(|e| format!("could not read the process list: {e}"))?;
     if !out.status.success() {
-        return Err("no pude leer la lista de procesos (CIM)".into());
+        return Err("could not read the process list (CIM)".into());
     }
     let text = String::from_utf8_lossy(&out.stdout);
     let pids: Vec<u32> = text
@@ -702,7 +702,7 @@ mod tests {
                 ],
                 "",
             );
-            assert!(leak.detail.contains("secreto"), "{}", leak.detail);
+            assert!(leak.detail.contains("secret"), "{}", leak.detail);
             assert!(!leak.detail.contains("abcdefghijklmnop"));
         });
     }

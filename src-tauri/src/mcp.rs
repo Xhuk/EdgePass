@@ -131,7 +131,7 @@ pub struct McpServer {
     /// client id — the widget cannot invent one.
     #[serde(default)]
     pub credential_command: String,
-    /// Start with the widget. Pair it with the `edgePass` logon task in Ajustes
+    /// Start with the widget. Pair it with the `edgePass` logon task in Settings
     /// and the servers come up with the session.
     #[serde(default)]
     pub autostart: bool,
@@ -173,7 +173,7 @@ pub struct ServerView {
     #[serde(flatten)]
     pub spec: McpServer,
     pub running: bool,
-    /// `corriendo (pid 1234)` · `parado` · `falta el binario`
+    /// `running (pid 1234)` · `stopped` · `binary missing`
     pub detail: String,
     /// The row declares a named tunnel **and** its connector is running. `false`
     /// covers both "no tunnel declared" (see `spec.tunnel`) and "declared but
@@ -254,7 +254,7 @@ pub async fn resolve_env_for(
         let value =
             crate::openbao::read_secret_value(cfg, token, &namespace, &want.path, &want.field)
                 .await
-                .map_err(|e| format!("{owner}: no pude leer {namespace}/{} ({e})", want.path))?;
+                .map_err(|e| format!("{owner}: could not read {namespace}/{} ({e})", want.path))?;
         out.push((want.key.clone(), value));
     }
     Ok(out)
@@ -285,7 +285,7 @@ pub fn run_credential_command(cfg: &AppConfig, id: &str) -> Result<String, Strin
     let line = s.credential_command.trim();
     if line.is_empty() {
         return Err(format!(
-            "'{}' no tiene comando de credenciales: cargalo en el panel MCP",
+            "'{}' has no credential command: add it in the MCP panel",
             s.label
         ));
     }
@@ -307,7 +307,7 @@ pub fn run_credential_command(cfg: &AppConfig, id: &str) -> Result<String, Strin
     quiet(&mut cmd);
     let out = cmd
         .output()
-        .map_err(|e| format!("no pude correr el comando de credenciales: {e}"))?;
+        .map_err(|e| format!("could not run the credential command: {e}"))?;
     let text = format!(
         "{}{}",
         String::from_utf8_lossy(&out.stdout),
@@ -315,14 +315,14 @@ pub fn run_credential_command(cfg: &AppConfig, id: &str) -> Result<String, Strin
     );
     let text = text.trim();
     if text.is_empty() {
-        return Err("el comando de credenciales no imprimió nada".to_string());
+        return Err("the credential command printed nothing".to_string());
     }
     Ok(if text.len() > MAX_CREDENTIAL_OUTPUT {
         let mut cut = MAX_CREDENTIAL_OUTPUT;
         while cut > 0 && !text.is_char_boundary(cut) {
             cut -= 1;
         }
-        format!("{}\n…[cortado]", &text[..cut])
+        format!("{}\n…[truncated]", &text[..cut])
     } else {
         text.to_string()
     })
@@ -404,7 +404,7 @@ impl McpStatusDto {
 pub fn validate(list: Vec<McpServer>) -> Result<Vec<McpServer>, String> {
     if list.len() > MAX_SERVERS {
         return Err(format!(
-            "demasiados servidores MCP: {} (máximo {MAX_SERVERS})",
+            "too many MCP servers: {} (max {MAX_SERVERS})",
             list.len()
         ));
     }
@@ -463,7 +463,7 @@ pub fn validate(list: Vec<McpServer>) -> Result<Vec<McpServer>, String> {
             .collect();
         if s.command.is_empty() {
             return Err(format!(
-                "servidor MCP '{}': falta el comando a ejecutar",
+                "MCP server '{}': missing the command to run",
                 s.id.trim()
             ));
         }
@@ -558,7 +558,7 @@ fn view_of(s: &McpServer, running: bool, detail: String, tunnel_running: bool) -
     // The two ways a row needs a fix instead of a click. Computed here, from
     // the same `detail` the panel reads, so a per-row LED cannot disagree with
     // the aggregate one.
-    let broken = detail.starts_with("falta el binario") || detail.contains("falta cloudflared");
+    let broken = detail.starts_with("binary missing") || detail.contains("cloudflared missing");
     ServerView {
         spec,
         running,
@@ -595,7 +595,7 @@ pub fn status(cfg: &AppConfig) -> McpStatusDto {
 /// Reads every row now, ignoring the cache.
 pub fn status_now(cfg: &AppConfig) -> McpStatusDto {
     if cfg.mcp_servers.is_empty() {
-        return McpStatusDto::empty("sin servidores MCP configurados");
+        return McpStatusDto::empty("no MCP servers configured");
     }
     let mut servers = Vec::with_capacity(cfg.mcp_servers.len());
     let mut running = 0;
@@ -614,7 +614,7 @@ pub fn status_now(cfg: &AppConfig) -> McpStatusDto {
         let (is_up, mut detail) = read_one(s);
         // A row that died under our hands says so, exit code included: that is
         // the difference between "click it" and "go read the log".
-        if !is_up && detail.starts_with("murió") {
+        if !is_up && detail.starts_with("exited") {
             dead.push(format!("{}: {detail}", s.label));
         }
         let tunnel = tunnel_state(cfg, s);
@@ -634,7 +634,7 @@ pub fn status_now(cfg: &AppConfig) -> McpStatusDto {
         if is_up {
             running += 1;
         }
-        if detail.starts_with("falta el binario") {
+        if detail.starts_with("binary missing") {
             missing.push(s.label.clone());
             broken = true;
         }
@@ -643,19 +643,19 @@ pub fn status_now(cfg: &AppConfig) -> McpStatusDto {
     let total = servers.len();
     let mut detail = if !missing.is_empty() {
         format!(
-            "{} de {total} corriendo · falta el binario: {}",
+            "{} of {total} running · binary missing: {}",
             running,
             missing.join(", ")
         )
     } else if running == total {
-        format!("{total} de {total} corriendo")
+        format!("{total} of {total} running")
     } else {
         format!(
-            "{running} de {total} corriendo · {} · {} con autostart",
+            "{running} of {total} running · {} · {} with autostart",
             if total - running == 1 {
-                "1 parado".to_string()
+                "1 stopped".to_string()
             } else {
-                format!("{} parados", total - running)
+                format!("{} stopped", total - running)
             },
             autostart
         )
@@ -668,7 +668,7 @@ pub fn status_now(cfg: &AppConfig) -> McpStatusDto {
     } else if !tunnels_up_names.is_empty() {
         // Say the half that nobody can see from `tasklist`: the connector is up,
         // so the public origin is really publishing this server.
-        detail = format!("{detail} · túnel {} arriba", tunnels_up_names.join(", "));
+        detail = format!("{detail} · tunnel {} up", tunnels_up_names.join(", "));
     }
     McpStatusDto {
         total,
@@ -747,8 +747,8 @@ pub fn autostart_all(cfg: &AppConfig, secrets: &Secrets) -> Vec<String> {
         match start_one(cfg, s, env_for(secrets, &s.id)) {
             Ok(msg) => {
                 // Anything that actually started (the server, its tunnel) is
-                // worth a log line; "ya estaba corriendo" is not.
-                if msg.contains("arrancado") {
+                // worth a log line; "already running" is not.
+                if msg.contains("started") {
                     notes.push(format!("{} ({msg})", s.label));
                 }
             }
@@ -827,7 +827,7 @@ pub fn restart_all(cfg: &AppConfig, secrets: &Secrets) -> Result<String, String>
 /// row cannot hide the others.
 fn each(cfg: &AppConfig, op: impl Fn(&McpServer) -> Result<String, String>) -> String {
     if cfg.mcp_servers.is_empty() {
-        return "sin servidores MCP configurados".to_string();
+        return "no MCP servers configured".to_string();
     }
     let mut parts = Vec::with_capacity(cfg.mcp_servers.len());
     for s in &cfg.mcp_servers {
@@ -843,9 +843,9 @@ fn find<'a>(cfg: &'a AppConfig, id: &str) -> Result<&'a McpServer, String> {
     let id = id.trim();
     cfg.mcp_servers.iter().find(|s| s.id == id).ok_or_else(|| {
         format!(
-            "servidor MCP desconocido: '{id}' · hay: {}",
+            "unknown MCP server: '{id}' · known: {}",
             if cfg.mcp_servers.is_empty() {
-                "(ninguno)".to_string()
+                "(none)".to_string()
             } else {
                 cfg.mcp_servers
                     .iter()
@@ -859,13 +859,13 @@ fn find<'a>(cfg: &'a AppConfig, id: &str) -> Result<&'a McpServer, String> {
 
 fn start_one(cfg: &AppConfig, s: &McpServer, extra: &[(String, String)]) -> Result<String, String> {
     if !binary_present(s) {
-        return Err(format!("falta el binario: {}", s.command));
+        return Err(format!("binary missing: {}", s.command));
     }
     let mut parts: Vec<String> = Vec::new();
     match alive_pid(s) {
         // A stopped process is just off; nothing gets started twice.
-        Some(0) => parts.push(format!("ya estaba corriendo ({})", image_of(s))),
-        Some(pid) => parts.push(format!("ya estaba corriendo (pid {pid})")),
+        Some(0) => parts.push(format!("already running ({})", image_of(s))),
+        Some(pid) => parts.push(format!("already running (pid {pid})")),
         None => parts.push(spawn_server(s, extra)?),
     }
     // The connector comes up right after the thing it publishes. A tunnel that
@@ -883,7 +883,7 @@ fn start_one(cfg: &AppConfig, s: &McpServer, extra: &[(String, String)]) -> Resu
 /// Its output goes to `%APPDATA%\edgePass\logs\mcp-<id>.log` instead of `null`:
 /// a widget has no console, so a server that dies on startup (port taken, bad
 /// config, gate secret rejected) used to leave *nothing* — the log said
-/// "arrancado (pid 30432)" and ten minutes later the port was empty with no way
+/// "started (pid 30432)" and ten minutes later the port was empty with no way
 /// to know why. The file is appended to, so a restart does not erase the reason
 /// the last one died.
 fn spawn_server(s: &McpServer, extra: &[(String, String)]) -> Result<String, String> {
@@ -921,11 +921,11 @@ fn spawn_server(s: &McpServer, extra: &[(String, String)]) -> Result<String, Str
                 .get_or_insert_with(HashMap::new)
                 .insert(s.id.clone(), child);
             // A fresh start makes the last death old news: the probe should say
-            // "corriendo", not "murió ayer con código 1".
+            // "running", not "died yesterday with code 1".
             forget_exit(&s.id);
-            Ok(format!("arrancado (pid {pid})"))
+            Ok(format!("started (pid {pid})"))
         }
-        Err(e) => Err(format!("no pude arrancar '{}': {e}", s.command)),
+        Err(e) => Err(format!("could not start '{}': {e}", s.command)),
     }
 }
 
@@ -952,26 +952,26 @@ fn stop_server(s: &McpServer) -> Result<String, String> {
             let pid = child.id();
             let _ = child.kill();
             let _ = child.wait();
-            return Ok(format!("detenido (pid {pid})"));
+            return Ok(format!("stopped (pid {pid})"));
         }
     }
     // 2. A process started elsewhere: only if the image is distinctive.
     let image = image_of(s);
     if image.is_empty() {
-        return Err("no sé qué proceso detener: poné 'command' o 'image'".to_string());
+        return Err("don't know which process to stop: set 'command' or 'image'".to_string());
     }
     if !alive_image(&image) {
-        return Ok("ya estaba parado".to_string());
+        return Ok("already stopped".to_string());
     }
     if is_generic_image(&image) {
         return Err(format!(
-            "no lo detengo: '{image}' es un intérprete genérico y matar por imagen se llevaría trabajo ajeno. \
-             Poné 'image' con el proceso real del servidor, o paralo desde su propia consola"
+            "not stopping it: '{image}' is a generic interpreter and killing by image would take out unrelated work. \
+             Set 'image' to the server's real process, or stop it from its own console"
         ));
     }
     match kill_by_image(&image) {
-        true => Ok(format!("detenido (por imagen {image})")),
-        false => Err(format!("no pude detener {image}")),
+        true => Ok(format!("stopped (by image {image})")),
+        false => Err(format!("could not stop {image}")),
     }
 }
 
@@ -1042,16 +1042,16 @@ fn alive_child(key: &str, image: &str) -> Option<u32> {
 
 fn read_one(s: &McpServer) -> (bool, String) {
     if !binary_present(s) {
-        return (false, format!("falta el binario: {}", s.command));
+        return (false, format!("binary missing: {}", s.command));
     }
     match alive_pid(s) {
-        Some(0) => (true, format!("corriendo ({})", image_of(s))),
-        Some(pid) => (true, format!("corriendo (pid {pid})")),
+        Some(0) => (true, format!("running ({})", image_of(s))),
+        Some(pid) => (true, format!("running (pid {pid})")),
         None => {
-            // "parado" is a click; "murió (código 1)" is a diagnosis.
+            // "stopped" is a click; "exited (code 1)" is a diagnosis.
             let note = exit_note(&s.id, &server_log_name(s));
             if note.is_empty() {
-                (false, "parado".to_string())
+                (false, "stopped".to_string())
             } else {
                 (false, note)
             }
@@ -1171,7 +1171,7 @@ pub fn tunnel_state(cfg: &AppConfig, s: &McpServer) -> TunnelState {
             declared: true,
             running: false,
             broken: true,
-            detail: format!("falta cloudflared para el túnel {name}: {}", exe.display()),
+            detail: format!("cloudflared missing for tunnel {name}: {}", exe.display()),
         };
     }
     // Our own child first; otherwise whoever answers to that image. A single
@@ -1185,11 +1185,11 @@ pub fn tunnel_state(cfg: &AppConfig, s: &McpServer) -> TunnelState {
         running,
         broken: false,
         detail: if running {
-            format!("túnel {name} arriba")
+            format!("tunnel {name} up")
         } else if !note.is_empty() {
-            format!("túnel {name} {note}")
+            format!("tunnel {name} {note}")
         } else {
-            format!("túnel {name} parado")
+            format!("tunnel {name} down")
         },
     }
 }
@@ -1201,12 +1201,12 @@ fn start_tunnel(cfg: &AppConfig, s: &McpServer) -> Result<String, String> {
         return Ok(String::new());
     }
     if tunnel_state(cfg, s).running {
-        return Ok(format!("túnel {name} ya estaba arriba"));
+        return Ok(format!("tunnel {name} already up"));
     }
     let exe = cloudflared_exe(cfg);
     if !path_present(&exe.to_string_lossy()) {
         return Err(format!(
-            "falta cloudflared: {} · poné cloudflaredExe en config.json",
+            "cloudflared missing: {} · set cloudflaredExe in config.json",
             exe.display()
         ));
     }
@@ -1229,10 +1229,10 @@ fn start_tunnel(cfg: &AppConfig, s: &McpServer) -> Result<String, String> {
                 .get_or_insert_with(HashMap::new)
                 .insert(tunnel_key(s), child);
             forget_exit(&tunnel_key(s));
-            Ok(format!("túnel {name} arrancado (pid {pid})"))
+            Ok(format!("tunnel {name} started (pid {pid})"))
         }
         Err(e) => Err(format!(
-            "no pude arrancar '{}' para el túnel {name}: {e}",
+            "could not start '{}' for tunnel {name}: {e}",
             exe.display()
         )),
     }
@@ -1263,12 +1263,12 @@ fn stop_tunnel(s: &McpServer) -> Result<String, String> {
     // "off" that leaves a stray connector publishing the origin is not off.
     let extra = stop_connectors_by_name(name);
     if extra > 0 {
-        parts.push(format!("{extra} conector(es) más"));
+        parts.push(format!("{extra} more connector(s)"));
     }
     if parts.is_empty() {
-        return Ok(format!("túnel {name} ya estaba parado"));
+        return Ok(format!("tunnel {name} already stopped"));
     }
-    Ok(format!("túnel {name} detenido ({})", parts.join(" · ")))
+    Ok(format!("tunnel {name} stopped ({})", parts.join(" · ")))
 }
 
 /// Kills every `cloudflared` whose command line runs that tunnel. Returns how
@@ -1371,7 +1371,7 @@ fn quiet(cmd: &mut Command) {
 // edgePass is a widget: a child it spawns inherits no console, so its output
 // goes nowhere unless we send it somewhere — and a server that dies on startup
 // (port taken, bad config) then leaves *nothing* behind. That is exactly how a
-// dead `my-api` looked "arrancado (pid 30432)" in the log with an empty port
+// dead `my-api` looked "started (pid 30432)" in the log with an empty port
 // ten minutes later. Two cheap pieces answer "why": a per-row log file, and the
 // exit code of the last child we held.
 
@@ -1427,11 +1427,11 @@ fn forget_exit(key: &str) {
     }
 }
 
-/// `murió (código 3) · log: mcp-x.log`, or "" when we never held that child.
+/// `exited (code 3) · log: mcp-x.log`, or "" when we never held that child.
 fn exit_note(key: &str, log: &str) -> String {
     let guard = LAST_EXIT.lock().unwrap_or_else(|e| e.into_inner());
     match guard.as_ref().and_then(|m| m.get(key)) {
-        Some(code) => format!("murió (código {code}) · log: {log}"),
+        Some(code) => format!("exited (code {code}) · log: {log}"),
         None => String::new(),
     }
 }
@@ -1522,30 +1522,30 @@ mod tests {
         let status = status_now(&cfg);
         assert_eq!(status.total, 0);
         assert!(!status.all_running());
-        assert!(status.detail.contains("sin servidores"));
+        assert!(status.detail.contains("no MCP servers"));
     }
 
     #[test]
     fn a_missing_binary_is_reported_not_spawned() {
         let cfg = AppConfig {
-            mcp_servers: vec![spec("ghost", r"C:\no\existe\ghost.exe")],
+            mcp_servers: vec![spec("ghost", r"C:\missing\ghost.exe")],
             ..AppConfig::default()
         };
         let status = status_now(&cfg);
         assert_eq!(status.total, 1);
         assert_eq!(status.running, 0);
-        assert!(status.servers[0].detail.starts_with("falta el binario"));
+        assert!(status.servers[0].detail.starts_with("binary missing"));
         assert!(start(&cfg, "ghost", &none()).is_err());
     }
 
     #[test]
     fn an_unknown_id_is_refused_and_the_error_lists_the_known_ones() {
         let cfg = AppConfig {
-            mcp_servers: validate(vec![spec("uno", "uno.exe")]).unwrap(),
+            mcp_servers: validate(vec![spec("one", "one.exe")]).unwrap(),
             ..AppConfig::default()
         };
         let err = stop(&cfg, "nope").unwrap_err();
-        assert!(err.contains("nope") && err.contains("uno"), "got: {err}");
+        assert!(err.contains("nope") && err.contains("one"), "got: {err}");
     }
 
     #[test]
@@ -1646,10 +1646,10 @@ mod tests {
             ..AppConfig::default()
         };
         let mut secrets = Secrets::new();
-        note_error(&mut secrets, "x", "no pude leer el vault".into());
+        note_error(&mut secrets, "x", "could not read the vault".into());
         let notes = autostart_all(&cfg, &secrets);
         assert_eq!(notes.len(), 1);
-        assert!(notes[0].contains("no pude leer el vault"), "got {notes:?}");
+        assert!(notes[0].contains("could not read the vault"), "got {notes:?}");
     }
 
     #[test]
@@ -1687,7 +1687,7 @@ mod tests {
     #[test]
     fn a_declared_tunnel_without_cloudflared_is_broken_not_merely_off() {
         let cfg = AppConfig {
-            cloudflared_exe: r"C:\no\existe\cloudflared.exe".into(),
+            cloudflared_exe: r"C:\missing\cloudflared.exe".into(),
             ..AppConfig::default()
         };
         let mut s = spec("x", "x.exe");
@@ -1696,7 +1696,7 @@ mod tests {
         assert!(t.declared);
         assert!(!t.running);
         assert!(t.broken, "a missing cloudflared is a fix, not a click");
-        assert!(t.detail.starts_with("falta cloudflared"), "got {}", t.detail);
+        assert!(t.detail.starts_with("cloudflared missing"), "got {}", t.detail);
     }
 
     #[test]
@@ -1708,7 +1708,7 @@ mod tests {
         s.tunnel = "edgepass-mcp".into();
         let cfg = AppConfig {
             mcp_servers: validate(vec![s]).unwrap(),
-            cloudflared_exe: r"C:\no\existe\cloudflared.exe".into(),
+            cloudflared_exe: r"C:\missing\cloudflared.exe".into(),
             ..AppConfig::default()
         };
         let status = status_now(&cfg);
@@ -1717,7 +1717,7 @@ mod tests {
         assert!(!status.all_running());
         assert!(status.broken);
         assert!(!status.servers[0].tunnel_running);
-        assert!(status.detail.contains("túnel"), "got {}", status.detail);
+        assert!(status.detail.contains("tunnel"), "got {}", status.detail);
     }
 
     #[test]
@@ -1737,12 +1737,12 @@ mod tests {
 
     #[test]
     fn a_child_that_died_says_so_and_points_at_its_log() {
-        // "parado" is a click; "murió (código 3) · log: …" is the diagnosis the
+        // "stopped" is a click; "exited (code 3) · log: …" is the diagnosis the
         // founder had to guess last time the server disappeared.
         let key = "test-died#exit";
         record_exit(key, 3);
         let note = exit_note(key, "mcp-test-died.log");
-        assert!(note.contains("código 3"), "got {note}");
+        assert!(note.contains("code 3"), "got {note}");
         assert!(note.contains("mcp-test-died.log"), "got {note}");
         forget_exit(key);
         assert!(exit_note(key, "mcp-test-died.log").is_empty());
@@ -1751,17 +1751,17 @@ mod tests {
     #[test]
     fn a_dead_server_puts_its_exit_code_in_the_status_line() {
         // What the LED shows has to name the death, not just count it: an
-        // "1 parado" is a click, a "murió (código 7)" is a diagnosis.
+        // "1 stopped" is a click, an "exited (code 7)" is a diagnosis.
         let cfg = AppConfig {
-            mcp_servers: validate(vec![spec("colgado", "nada-que-ver.exe")]).unwrap(),
+            mcp_servers: validate(vec![spec("hung", "unrelated.exe")]).unwrap(),
             ..AppConfig::default()
         };
-        record_exit("colgado", 7);
+        record_exit("hung", 7);
         let status = status_now(&cfg);
-        forget_exit("colgado");
+        forget_exit("hung");
         assert!(!status.all_running());
-        assert!(status.detail.contains("murió"), "got {}", status.detail);
-        assert!(status.detail.contains("código 7"), "got {}", status.detail);
+        assert!(status.detail.contains("exited"), "got {}", status.detail);
+        assert!(status.detail.contains("code 7"), "got {}", status.detail);
     }
 
     #[test]

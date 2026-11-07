@@ -140,13 +140,13 @@ impl GrantBoard {
         let ns_norm = norm_ns(&parsed.namespace);
         let path_norm = norm_path(&parsed.path);
         if path_norm.is_empty() {
-            return Err("falta 'path'".into());
+            return Err("missing 'path'".into());
         }
         if parsed.cmd.is_empty() {
-            return Err("falta 'cmd' (array: [programa, args…])".into());
+            return Err("missing 'cmd' (array: [program, args…])".into());
         }
         if parsed.action != "run" {
-            return Err("action debe ser 'run'".into());
+            return Err("action must be 'run'".into());
         }
 
         let dto = GrantRequestDto {
@@ -222,7 +222,7 @@ impl GrantBoard {
                 .get_mut(id)
                 .ok_or_else(|| "unknown requestId".to_string())?;
             if rec.state != RequestState::Pending {
-                return Err(format!("request no está pendiente ({})", rec.state.as_str()));
+                return Err(format!("request is not pending ({})", rec.state.as_str()));
             }
             rec.state = RequestState::Running;
             (
@@ -252,7 +252,7 @@ impl GrantBoard {
             .get_mut(id)
             .ok_or_else(|| "unknown requestId".to_string())?;
         if rec.state != RequestState::Pending {
-            return Err(format!("request no está pendiente ({})", rec.state.as_str()));
+            return Err(format!("request is not pending ({})", rec.state.as_str()));
         }
         rec.state = RequestState::Denied;
         promote_locked(&mut inner);
@@ -318,7 +318,7 @@ pub fn parse_request(req: &Value) -> Result<ParsedRequest, String> {
         .trim()
         .to_ascii_lowercase();
     if action != "run" {
-        return Err("action debe ser 'run'".into());
+        return Err("action must be 'run'".into());
     }
 
     let actor = {
@@ -345,7 +345,7 @@ pub fn parse_request(req: &Value) -> Result<ParsedRequest, String> {
         })
         .unwrap_or_default();
     if cmd.is_empty() {
-        return Err("falta 'cmd' (array: [programa, args…])".into());
+        return Err("missing 'cmd' (array: [program, args…])".into());
     }
 
     let keys: Vec<String> = req
@@ -413,7 +413,7 @@ pub fn parse_request(req: &Value) -> Result<ParsedRequest, String> {
 fn resolve_scope(req: &Value) -> Result<(String, String, Value), String> {
     if let Some(arr) = req.get("entries").and_then(Value::as_array) {
         if arr.is_empty() {
-            return Err("entries vacío".into());
+            return Err("entries is empty".into());
         }
         let first = &arr[0];
         let namespace = first
@@ -427,7 +427,7 @@ fn resolve_scope(req: &Value) -> Result<(String, String, Value), String> {
             .unwrap_or("")
             .to_string();
         if norm_path(&path).is_empty() {
-            return Err("entry sin 'path'".into());
+            return Err("entry without 'path'".into());
         }
         return Ok((namespace, path, Value::Array(arr.clone())));
     }
@@ -443,7 +443,7 @@ fn resolve_scope(req: &Value) -> Result<(String, String, Value), String> {
         .unwrap_or("")
         .to_string();
     if norm_path(&path).is_empty() {
-        return Err("falta 'path'".into());
+        return Err("missing 'path'".into());
     }
     let ns_json = if norm_ns(&namespace).is_empty() {
         String::new()

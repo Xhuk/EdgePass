@@ -46,14 +46,14 @@ pub fn daemoncurier_exe(cfg: &crate::config::AppConfig) -> PathBuf {
 pub fn open_daemoncurier(cfg: &crate::config::AppConfig) -> Result<String, String> {
     let exe = daemoncurier_exe(cfg);
     if exe.as_os_str().is_empty() {
-        return Err("DaemonCurier no está configurado (daemoncurierExe en la config o EDGEPASS_DAEMONCURIER)".into());
+        return Err("DaemonCurier is not configured (daemoncurierExe in the config or EDGEPASS_DAEMONCURIER)".into());
     }
     if focus_via_pipe() {
-        return Ok("DaemonCurier enfocado".into());
+        return Ok("DaemonCurier focused".into());
     }
     if !exe.is_file() {
         return Err(format!(
-            "no encuentro DaemonCurier en {} (definí daemoncurierExe o EDGEPASS_DAEMONCURIER)",
+            "cannot find DaemonCurier at {} (set daemoncurierExe or EDGEPASS_DAEMONCURIER)",
             exe.display()
         ));
     }
@@ -64,8 +64,8 @@ pub fn open_daemoncurier(cfg: &crate::config::AppConfig) -> Result<String, Strin
         cmd.creation_flags(CREATE_NO_WINDOW);
     }
     cmd.spawn()
-        .map_err(|e| format!("no pude abrir DaemonCurier: {e}"))?;
-    Ok("DaemonCurier abierto".into())
+        .map_err(|e| format!("could not open DaemonCurier: {e}"))?;
+    Ok("DaemonCurier opened".into())
 }
 
 /// `{"op":"focus"}` over the widget's own pipe. `false` when nobody is listening.
@@ -102,28 +102,28 @@ mod tests {
 
     #[test]
     fn the_exe_is_configured_or_off() {
-        // Sin configuración no hay default: la integración está apagada, no rota.
+        // With no configuration there is no default: the integration is off, not broken.
         let cfg = crate::config::AppConfig::default();
         assert!(daemoncurier_exe(&cfg).as_os_str().is_empty());
         let mut cfg = crate::config::AppConfig::default();
-        cfg.daemoncurier_exe = r"D:\otro\DaemonCurier.exe".into();
+        cfg.daemoncurier_exe = r"D:\other\DaemonCurier.exe".into();
         assert_eq!(
             daemoncurier_exe(&cfg),
-            PathBuf::from(r"D:\otro\DaemonCurier.exe")
+            PathBuf::from(r"D:\other\DaemonCurier.exe")
         );
     }
 
     #[test]
     fn open_without_a_configured_exe_says_how_to_fix_it() {
         let cfg = crate::config::AppConfig::default();
-        let err = open_daemoncurier(&cfg).expect_err("sin exe configurado");
+        let err = open_daemoncurier(&cfg).expect_err("no exe configured");
         assert!(err.contains("daemoncurierExe"), "{err}");
         assert!(!err.contains(r"\proyectos"), "{err}");
     }
 
     #[test]
     fn focus_fails_fast_when_nobody_is_listening() {
-        // Sin el widget corriendo no hay pipe: y sin pipe no se queda colgado.
+        // With the widget not running there is no pipe: and with no pipe it does not hang.
         let started = std::time::Instant::now();
         let focused = focus_via_pipe();
         assert!(!focused || started.elapsed() < PIPE_TIMEOUT + std::time::Duration::from_secs(1));

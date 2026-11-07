@@ -1,4 +1,5 @@
 /** Google Password Manager / Chrome CSV → OpenBao login rows. */
+import { t } from "./i18n";
 
 export type LoginDraft = {
   slug: string;
@@ -117,7 +118,7 @@ export function parseGooglePasswordCsv(text: string): LoginDraft[] {
 
   if (idx.password === undefined && idx.username === undefined && idx.url === undefined) {
     throw new Error(
-      "CSV no parece de Google Password Manager (faltan columnas url/username/password)",
+      t("This CSV does not look like Google Password Manager (missing url/username/password columns)"),
     );
   }
 

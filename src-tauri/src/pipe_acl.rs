@@ -75,7 +75,7 @@ impl UserOnly {
             Ok(s) => Some(s),
             Err(e) => {
                 crate::log_warn!(
-                    "ipc: no pude construir la DACL de usuario ({e}); el pipe queda sin restringir"
+                    "ipc: could not build the user DACL ({e}); the pipe stays unrestricted"
                 );
                 None
             }
@@ -86,7 +86,7 @@ impl UserOnly {
     /// `GetLastError`: the log line is only useful if it says where, and tests
     /// need the reason even with no logger installed.
     pub(crate) fn build() -> Result<Self, String> {
-        let sid = current_user_sid().ok_or("no pude leer el SID del usuario")?;
+        let sid = current_user_sid().ok_or("could not read the user SID")?;
 
         // sizeof(ACL) + sizeof(ACCESS_ALLOWED_ACE) - sizeof(the SID's first
         // DWORD, already counted inside ACCESS_ALLOWED_ACE) + sizeof(SID).

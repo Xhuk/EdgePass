@@ -41,17 +41,17 @@ mod tests {
     fn looks_like_a_locale_tag_when_it_answers() {
         let tag = user_locale();
         if tag.is_empty() {
-            return; // platform sin respuesta: es un caso válido
+            return; // platform with no answer: a valid case
         }
-        // "en-US", "es-ES", "C", "en_US.UTF-8"… el idioma son las primeras 2-3
-        // letras; lo que importa es que se pueda leer una.
+        // "en-US", "es-ES", "C", "en_US.UTF-8"… the language is the first 2-3
+        // letters; what matters is that one can be read.
         let lang: String = tag
             .chars()
             .take_while(|c| c.is_ascii_alphabetic())
             .collect();
         assert!(
             (2..=3).contains(&lang.len()),
-            "'{tag}' no empieza por un idioma de 2-3 letras"
+            "'{tag}' does not start with a 2-3 letter language"
         );
     }
 }

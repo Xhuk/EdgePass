@@ -27,13 +27,13 @@ pub fn status() -> AutostartStatusDto {
             installed: true,
             task_name: TASK_NAME.into(),
             exe,
-            message: format!("tarea '{TASK_NAME}' al iniciar sesión"),
+            message: format!("task '{TASK_NAME}' at logon"),
         },
         Ok(false) => AutostartStatusDto {
             installed: false,
             task_name: TASK_NAME.into(),
             exe,
-            message: "no instalado".into(),
+            message: "not installed".into(),
         },
         Err(e) => AutostartStatusDto {
             installed: false,
@@ -80,12 +80,12 @@ Register-ScheduledTask -TaskName '{TASK_NAME}' -Action $action -Trigger $trigger
         ));
     }
 
-    crate::log_info!("autostart instalado · task={TASK_NAME} exe={exe_s}");
+    crate::log_info!("autostart installed · task={TASK_NAME} exe={exe_s}");
     Ok(AutostartStatusDto {
         installed: true,
         task_name: TASK_NAME.into(),
         exe: exe_s,
-        message: format!("OK · arranca al logon · {TASK_NAME}"),
+        message: format!("OK · starts at logon · {TASK_NAME}"),
     })
 }
 
@@ -106,12 +106,12 @@ pub fn remove() -> Result<AutostartStatusDto, String> {
         let err = String::from_utf8_lossy(&out.stderr);
         return Err(format!("remove task failed: {}", err.trim()));
     }
-    crate::log_info!("autostart eliminado · task={TASK_NAME}");
+    crate::log_info!("autostart removed · task={TASK_NAME}");
     Ok(AutostartStatusDto {
         installed: false,
         task_name: TASK_NAME.into(),
         exe: current_exe_display(),
-        message: "autostart quitado".into(),
+        message: "autostart removed".into(),
     })
 }
 

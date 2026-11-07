@@ -21,7 +21,7 @@ pub fn fill(buf: &mut [u8]) -> Result<(), String> {
             )
         };
         if status < 0 {
-            return Err(format!("BCryptGenRandom falló: {status}"));
+            return Err(format!("BCryptGenRandom failed: {status}"));
         }
         Ok(())
     }
@@ -42,7 +42,7 @@ pub fn fill(buf: &mut [u8]) -> Result<(), String> {
 /// passphrase: every word must be equally likely.
 pub fn below(n: u32) -> Result<u32, String> {
     if n == 0 {
-        return Err("rand::below(0) no tiene respuesta".into());
+        return Err("rand::below(0) has no answer".into());
     }
     if n == 1 {
         return Ok(0);
@@ -67,7 +67,7 @@ mod tests {
         for n in [2u32, 7, 10, 7411, 7776] {
             for _ in 0..500 {
                 let v = below(n).unwrap();
-                assert!(v < n, "below({n}) devolvio {v}");
+                assert!(v < n, "below({n}) returned {v}");
             }
         }
     }
@@ -82,7 +82,7 @@ mod tests {
         for _ in 0..4000 {
             seen[below(n).unwrap() as usize] += 1;
         }
-        assert!(seen.iter().all(|c| *c > 0), "alguna posicion no salio: {seen:?}");
+        assert!(seen.iter().all(|c| *c > 0), "some slot never came up: {seen:?}");
     }
 
     #[test]
@@ -101,6 +101,6 @@ mod tests {
         let mut b = [0u8; 32];
         fill(&mut a).unwrap();
         fill(&mut b).unwrap();
-        assert_ne!(a, b, "dos llenados seguidos dieron lo mismo");
+        assert_ne!(a, b, "two fills in a row came out the same");
     }
 }

@@ -132,18 +132,18 @@ pub fn make_with(opts: &Options, salt: &[u8]) -> Result<Made, String> {
     let n = list.len();
     if n < 1000 {
         return Err(format!(
-            "la lista de palabras no cargó bien: {n} entradas"
+            "the word list did not load correctly: {n} entries"
         ));
     }
     if opts.words < MIN_WORDS || opts.words > MAX_WORDS {
         return Err(format!(
-            "cantidad de palabras fuera de rango: {} (se aceptan entre {MIN_WORDS} y {MAX_WORDS})",
+            "word count out of range: {} ({MIN_WORDS} to {MAX_WORDS} accepted)",
             opts.words
         ));
     }
     if opts.random_chars > MAX_RANDOM {
         return Err(format!(
-            "bloque aleatorio fuera de rango: {} (máximo {MAX_RANDOM})",
+            "random block out of range: {} (maximum {MAX_RANDOM})",
             opts.random_chars
         ));
     }
@@ -157,7 +157,7 @@ pub fn make_with(opts: &Options, salt: &[u8]) -> Result<Made, String> {
     let symbol = !opts.compatible && opts.symbol;
     if !SEPARATORS.contains(&separator) {
         return Err(format!(
-            "separador no permitido: {separator:?}. Los válidos son {SEPARATORS:?}"
+            "separator not allowed: {separator:?}. Valid ones are {SEPARATORS:?}"
         ));
     }
 
@@ -210,7 +210,7 @@ pub fn make_with(opts: &Options, salt: &[u8]) -> Result<Made, String> {
     let length = value.chars().count();
     let advice = if length < SHORT_WARNING {
         Some(format!(
-            "Quedaron {length} caracteres. Hay sistemas que piden {SHORT_WARNING} o más: una palabra extra lo resuelve."
+            "That left {length} characters. Some systems require {SHORT_WARNING} or more: one extra word fixes it."
         ))
     } else {
         None
@@ -263,19 +263,19 @@ mod tests {
         let list = vocabulary();
         assert!(
             list.len() >= 7400,
-            "la lista quedo corta: {} entradas",
+            "the list came out short: {} entries",
             list.len()
         );
         for w in &list {
             assert!(
                 w.chars().all(|c| c.is_ascii_lowercase()),
-                "palabra con caracteres prohibidos: {w}"
+                "word with forbidden characters: {w}"
             );
         }
         let mut sorted = list.clone();
         sorted.sort_unstable();
         sorted.dedup();
-        assert_eq!(sorted.len(), list.len(), "la lista tiene palabras repetidas");
+        assert_eq!(sorted.len(), list.len(), "the list has repeated words");
     }
 
     #[test]
@@ -286,7 +286,7 @@ mod tests {
             ..Default::default()
         })
         .unwrap();
-        assert_eq!(made.value.split('-').count(), 4, "quedo: {}", made.value);
+        assert_eq!(made.value.split('-').count(), 4, "got: {}", made.value);
         assert_eq!(made.words, 4);
     }
 
@@ -305,7 +305,7 @@ mod tests {
             .unwrap();
             assert!(
                 made.value.chars().all(|c| c.is_ascii_alphanumeric()),
-                "modo compatible devolvio: {}",
+                "compatible mode returned: {}",
                 made.value
             );
             assert!(made.compatible);
@@ -336,7 +336,7 @@ mod tests {
                     ..Default::default()
                 })
                 .is_err(),
-                "debio rechazar el separador {bad}"
+                "should have rejected the separator {bad}"
             );
         }
     }
@@ -350,7 +350,7 @@ mod tests {
                     ..Default::default()
                 })
                 .is_err(),
-                "debio rechazar {bad} palabras"
+                "should have rejected {bad} words"
             );
         }
     }
@@ -366,7 +366,7 @@ mod tests {
         assert!((made.entropy_bits - expected).abs() < 0.001);
         assert!(
             made.entropy_bits > 76.0,
-            "seis palabras deberian pasar de 76 bits, dieron {}",
+            "six words should clear 76 bits, got {}",
             made.entropy_bits
         );
     }
@@ -393,14 +393,14 @@ mod tests {
             rich.value
                 .chars()
                 .any(|c| !c.is_alphanumeric() && c != '-'),
-            "no quedo ningun simbolo: {}",
+            "no symbol came out: {}",
             rich.value
         );
         let tail: String = rich.value.chars().rev().take(3).collect();
         let tail: String = tail.chars().rev().collect();
         assert!(
             tail.chars().take(2).all(|c| c.is_ascii_digit()),
-            "los digitos no quedaron al final: {tail}"
+            "the digits did not end up at the end: {tail}"
         );
     }
 
@@ -416,7 +416,7 @@ mod tests {
             let first = word.chars().next().unwrap();
             assert!(
                 first.is_ascii_uppercase(),
-                "palabra sin mayuscula inicial: {word}"
+                "word without an initial capital: {word}"
             );
         }
     }
@@ -425,7 +425,7 @@ mod tests {
     fn two_calls_do_not_repeat() {
         let a = make(&Options::default()).unwrap().value;
         let b = make(&Options::default()).unwrap().value;
-        assert_ne!(a, b, "dos frases seguidas salieron iguales");
+        assert_ne!(a, b, "two phrases in a row came out the same");
     }
 
     #[test]
@@ -436,7 +436,7 @@ mod tests {
             ..Default::default()
         })
         .unwrap();
-        assert!(made.advice.is_some(), "tres palabras deberian avisar");
+        assert!(made.advice.is_some(), "three words should warn");
     }
 
     #[test]
@@ -455,12 +455,12 @@ mod tests {
         let expected = 8.0 * (ALNUM.len() as f64).log2();
         assert!(
             (rich.entropy_bits - plain.entropy_bits - expected).abs() < 0.001,
-            "delta de entropia inesperado"
+            "unexpected entropy delta"
         );
         assert_eq!(rich.random_chars, 8);
         assert!(
             rich.value.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'),
-            "el bloque aleatorio metio algo raro: {}",
+            "the random block put something odd in: {}",
             rich.value
         );
     }

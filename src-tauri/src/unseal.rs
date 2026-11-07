@@ -95,7 +95,7 @@ pub async fn seal_status(cfg: &AppConfig) -> SealStatusDto {
                 progress: 0,
                 threshold: 0,
                 version: None,
-                message: "OpenBao no responde (¿servicio caído?)".into(),
+                message: "OpenBao is not answering (is the service down?)".into(),
             };
         }
     };
@@ -143,11 +143,11 @@ pub async fn seal_status(cfg: &AppConfig) -> SealStatusDto {
         .map(|s| s.to_string());
 
     let message = if !initialized {
-        "No inicializado".into()
+        "Not initialized".into()
     } else if sealed {
-        format!("Sellado ({progress}/{threshold})")
+        format!("Sealed ({progress}/{threshold})")
     } else {
-        "Abierto".into()
+        "Open".into()
     };
 
     SealStatusDto {
@@ -164,8 +164,8 @@ pub async fn seal_status(cfg: &AppConfig) -> SealStatusDto {
 
 fn read_unseal_keys(init_path: &str) -> Result<Vec<String>, String> {
     if init_path.trim().is_empty() {
-        // Sin ruta no hay llaves: el mensaje dice el campo, no una ruta que no existe.
-        return Err("Init JSON no configurado en Ajustes → Vault".into());
+        // No path means no keys: the message names the field, not a path that does not exist.
+        return Err("Init JSON not configured in Settings → Vault".into());
     }
     let path = PathBuf::from(init_path);
     if !path.exists() {
@@ -245,7 +245,7 @@ pub async fn unseal(cfg: &AppConfig) -> Result<SealStatusDto, String> {
     // `500 local node not active`. Waiting here is what stops the first write of
     // the day from failing on a vault that is perfectly fine.
     wait_until_active(cfg, &http).await;
-    crate::log_info!("unseal: sellado={} ({})", after.sealed, after.message);
+    crate::log_info!("unseal: sealed={} ({})", after.sealed, after.message);
     Ok(after)
 }
 
@@ -277,7 +277,7 @@ async fn wait_until_active(cfg: &AppConfig, http: &reqwest::Client) {
         }
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
-    crate::log_warn!("unseal: el nodo no se anunció activo en 2s; sigo igual");
+    crate::log_warn!("unseal: the node did not report itself active within 2s; continuing anyway");
 }
 
 /// Seal vault (requires token). Local-only.
@@ -312,7 +312,7 @@ pub async fn seal(cfg: &AppConfig, token: &str) -> Result<SealStatusDto, String>
     }
     let after = seal_status(cfg).await;
     crate::log_warn!(
-        "seal manual: vault sellado para TODOS sus clientes (sellado={})",
+        "manual seal: vault sealed for ALL its clients (sealed={})",
         after.sealed
     );
     Ok(after)
@@ -325,7 +325,7 @@ pub async fn ensure_unsealed(cfg: &AppConfig) -> Result<SealStatusDto, String> {
         return Err(status.message);
     }
     if !status.initialized {
-        return Err("OpenBao no inicializado".into());
+        return Err("OpenBao is not initialized".into());
     }
     if !status.sealed {
         return Ok(status);

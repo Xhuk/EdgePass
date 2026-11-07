@@ -22,7 +22,7 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 /// `EDGEPASS_QRING_PACK`). An empty value means the integration is off; the
 /// LED says so instead of guessing a path that belongs to another machine.
 fn unconfigured_msg() -> String {
-    "pack de Q-ring no configurado (qringPack en la config o EDGEPASS_QRING_PACK)".into()
+    "Q-ring pack not configured (qringPack in the config or EDGEPASS_QRING_PACK)".into()
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -219,12 +219,12 @@ pub fn policy_after_stop(cfg: &crate::config::AppConfig) -> Option<crate::config
 fn with_policy_off(msg: String) -> String {
     let cfg = match crate::config::load_config() {
         Ok(cfg) => cfg,
-        Err(e) => return format!("{msg} · no pude leer la config para apagar la política: {e}"),
+        Err(e) => return format!("{msg} · could not read the config to turn the policy off: {e}"),
     };
     match policy_after_stop(&cfg) {
         Some(next) => match crate::config::save_config(&next) {
-            Ok(()) => format!("{msg} · política apagada"),
-            Err(e) => format!("{msg} · no pude apagar la política: {e}"),
+            Ok(()) => format!("{msg} · policy off"),
+            Err(e) => format!("{msg} · could not turn the policy off: {e}"),
         },
         None => msg,
     }
@@ -470,43 +470,43 @@ mod tests {
     #[test]
     fn stopping_the_gateway_pulls_the_policy() {
         let governed = AppConfig::default();
-        assert!(governed.qring_governed, "el default permite correr");
+        assert!(governed.qring_governed, "the default allows running");
 
-        let next = policy_after_stop(&governed).expect("un stop con la política ON escribe");
+        let next = policy_after_stop(&governed).expect("a stop with the policy ON writes");
         assert!(
             !next.qring_governed,
-            "sin gateway no hay política que valga"
+            "no gateway means no policy worth keeping"
         );
         assert!(
             governed.qring_governed,
-            "el helper no toca el original: quien llama decide si guarda"
+            "the helper leaves the original alone: the caller decides whether to save"
         );
 
         let mut already_off = AppConfig::default();
         already_off.qring_governed = false;
         assert!(
             policy_after_stop(&already_off).is_none(),
-            "sin nada que apagar no hay escritura"
+            "nothing to turn off means no write"
         );
     }
 
     #[test]
     fn an_unconfigured_pack_refuses_with_a_useful_message() {
-        // Sin pack declarado, ni el LED ni el click deben adivinar una ruta.
+        // With no declared pack, neither the LED nor the click may guess a path.
         let cfg = AppConfig::default();
         let st = status(&cfg.qring_pack, &cfg.qring_host);
-        assert!(!st.pack_ok, "sin pack no puede estar ok");
+        assert!(!st.pack_ok, "without a pack it cannot be ok");
         assert!(
-            st.message.contains("no configurado"),
-            "mensaje con el cómo: {}",
+            st.message.contains("not configured"),
+            "message with the how: {}",
             st.message
         );
         assert!(
             !st.message.contains(r"\proyectos"),
-            "nada del binario pierde una ruta de otra máquina: {}",
+            "nothing in the binary leaks another machine's path: {}",
             st.message
         );
-        let err = control(&cfg.qring_pack, &cfg.qring_host, "on").expect_err("sin pack");
-        assert!(err.contains("no configurado"), "{err}");
+        let err = control(&cfg.qring_pack, &cfg.qring_host, "on").expect_err("without a pack");
+        assert!(err.contains("not configured"), "{err}");
     }
 }
