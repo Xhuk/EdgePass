@@ -65,6 +65,21 @@ offers to start it. An agent sees the same answer in `{"op":"status"}` → `setu
 
 The installer is per-user. It does not need administrator rights.
 
+## Give the skill to your agent
+
+The installer ships the app, not the agent instructions. Copy them into your
+agent's skills folder, or point the agent at `skills/edgepass/SKILL.md`:
+
+```powershell
+powershell -File scripts\install-skills.ps1
+# another folder: -Dest "$HOME\.claude\skills" -Force
+```
+
+Then say **“usa edge pass”**. The skill carries the rule that matters: the agent
+never sees a secret value. It asks the widget (`meter`), searches names (`search`)
+or injects the value into a child process (`run`). The backend enforces the same
+rule: no pipe operation returns a value.
+
 ## First run
 
 With no vault configured, the panel opens once with the setup card described

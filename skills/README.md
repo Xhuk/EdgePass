@@ -25,7 +25,14 @@ stranger needs on day one. Shipping them inside the repository means:
 
 ## How to use them
 
-Give the file to your agent, or point it at the folder. A short prompt works:
+Give the file to your agent, or point it at the folder. The repo ships a helper
+that copies the three into the shared hub (`~/.agents/skills`):
+
+```powershell
+powershell -File scripts\install-skills.ps1
+```
+
+Or point the agent at the files directly:
 
 > Read `skills/openbao-bootstrap/SKILL.md` and `skills/edgepass/SKILL.md`. Then guide
 > me through the prerequisites on this machine.
