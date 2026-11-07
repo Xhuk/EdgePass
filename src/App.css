@@ -2648,3 +2648,25 @@ html.is-morphing .dock-tab {
     --material: rgba(6, 8, 10, 0.98);
   }
 }
+
+/* Nombre y campo, uno debajo del otro.
+   Cinco campos sueltos sin etiqueta obligan a conocer el modelo de memoria: la
+   unica persona que los usa es la que los escribio. Con el nombre arriba, el
+   panel explica el spec sin abrir el codigo. */
+.mcp-labelled {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mcp-labelled .mcp-field {
+  width: 100%;
+  flex: 0 0 auto;
+}
+.mcp-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-2);
+  font-weight: 600;
+  padding-left: 2px;
+}

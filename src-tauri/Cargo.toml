@@ -1,6 +1,6 @@
 [package]
 name = "edgepass"
-version = "0.4.0"
+version = "0.4.1"
 description = "Collapsible OpenBao secret widget for Windows and macOS"
 authors = ["Xhuk"]
 edition = "2021"

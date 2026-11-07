@@ -121,6 +121,25 @@ const EN: Record<string, string> = {
   Valor: "Value",
   "Cada botón del header es una fila: qué": "Each header button is a row: what",
 
+  // MCP agnostico: el panel nombra las tres formas de ejecutar
+  Ejecutable: "Executable",
+  Directorio: "Directory",
+  Argumentos: "Arguments",
+  "Imagen de contenedor": "Container image",
+  "URL pública": "Public URL",
+  "Túnel nombrado": "Named tunnel",
+  "separados por espacio": "space separated",
+  "ghcr.io/usuario/servidor:tag (opcional, en vez del ejecutable)":
+    "ghcr.io/user/server:tag (optional, instead of the executable)",
+  "opcional (cloudflared tunnel run …)": "optional (cloudflared tunnel run …)",
+  "etiqueta del servidor (ej. mi-servidor)": "server label (e.g. my-server)",
+  "Pegar o copiar servidores como JSON": "Paste or copy servers as JSON",
+  JSON: "JSON",
+  "Ocultar JSON": "Hide JSON",
+  "Agregar a la lista": "Add to the list",
+  "Copiar JSON": "Copy JSON",
+  "Un objeto o una lista. Campos: label, command, args, cwd, image, env, secretEnv, publicUrl, tunnel, path, autostart. Lo que falte toma el valor vacío.":
+    "One object or a list. Fields: label, command, args, cwd, image, env, secretEnv, publicUrl, tunnel, path, autostart. Anything missing takes the empty value.",
   // Passphrase generator (Meter)
   "Sugerir contraseña": "Suggest password",
   palabras: "words",

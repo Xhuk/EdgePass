@@ -460,6 +460,33 @@ function blankServer(): McpServerSpec {
   };
 }
 
+/** One MCP server, or a list of them, pasted as JSON.
+ *
+ *  This is what makes the panel agnostic: any harness can emit
+ *  `{ label, command, args, cwd, secretEnv }` and edgePass picks it up, instead
+ *  of a person filling seven inputs by hand. Unknown fields are ignored and
+ *  missing ones take the blank defaults, so a minimal object is enough.
+ */
+function parseMcpJson(text: string): McpServerSpec[] {
+  const raw: unknown = JSON.parse(text);
+  const items = Array.isArray(raw) ? raw : [raw];
+  return items.map((item) => {
+    const src = (typeof item === "object" && item !== null ? item : {}) as Record<string, unknown>;
+    const base = blankServer();
+    return {
+      ...base,
+      ...src,
+      args: Array.isArray(src.args) ? (src.args as unknown[]).map(String) : base.args,
+      env: Array.isArray(src.env) ? (src.env as McpServerSpec["env"]) : base.env,
+      secretEnv: Array.isArray(src.secretEnv)
+        ? (src.secretEnv as McpServerSpec["secretEnv"])
+        : base.secretEnv,
+      clients: Array.isArray(src.clients) ? (src.clients as McpServerSpec["clients"]) : base.clients,
+      autostart: typeof src.autostart === "boolean" ? src.autostart : base.autostart,
+    };
+  });
+}
+
 /** Everything needed to explain a bad install without a debugger. */
 type Diagnostics = {
   version: string;
@@ -1900,6 +1927,9 @@ export default function App() {
    */
   /** The MCP list this panel edits, exactly like `toggles[]` in Ajustes. */
   const [mcpDrafts, setMcpDrafts] = useState<McpServerSpec[]>([]);
+  /** Paste-a-server box. A harness can emit the JSON; a person can copy it back. */
+  const [showMcpJson, setShowMcpJson] = useState(false);
+  const [mcpJsonText, setMcpJsonText] = useState("");
   /** Live process state, refreshed on open and after every control click. */
   const [mcpLive, setMcpLive] = useState<McpStatus | null>(null);
   const [mcpMsg, setMcpMsg] = useState<string | null>(null);
@@ -3891,7 +3921,7 @@ export default function App() {
                               <input
                                 className="mcp-field"
                                 value={row.label}
-                                placeholder={t("etiqueta (ej. reasonixmcp)")}
+                                placeholder={t("etiqueta del servidor (ej. mi-servidor)")}
                                 onChange={(e) => editMcp(i, { label: e.target.value })}
                               />
                               <label
@@ -3942,43 +3972,70 @@ export default function App() {
                               </button>
                             </div>
                             {live?.detail && <div className="mcp-detail">{live.detail}</div>}
-                            <input
-                              className="mcp-field"
-                              value={row.command}
-                              placeholder={t("C:\ruta\server.exe")}
-                              onChange={(e) => editMcp(i, { command: e.target.value })}
-                            />
-                            <input
-                              className="mcp-field"
-                              value={row.cwd}
-                              placeholder={t("directorio de trabajo (opcional)")}
-                              onChange={(e) => editMcp(i, { cwd: e.target.value })}
-                            />
-                            <input
-                              className="mcp-field"
-                              value={row.args.join(" ")}
-                              placeholder={t("argumentos, separados por espacio")}
-                              onChange={(e) =>
-                                editMcp(i, { args: e.target.value.split(/\s+/).filter(Boolean) })
-                              }
-                            />
-                            <input
-                              className="mcp-field"
-                              value={row.publicUrl}
-                              placeholder={t("https://host:8443 (el origen público del server MCP)")}
-                              onChange={(e) => editMcp(i, { publicUrl: e.target.value })}
-                            />
+                            {/* Tres formas de ejecutar, y el panel nombra las tres.
+                                Antes eran cinco campos sueltos sin etiqueta: el
+                                modelo solo lo entendía quien lo escribió. */}
+                            <div className="mcp-labelled">
+                              <span className="mcp-label">{t("Ejecutable")}</span>
+                              <input
+                                className="mcp-field"
+                                value={row.command}
+                                placeholder="C:\\ruta\\servidor-mcp.exe"
+                                onChange={(e) => editMcp(i, { command: e.target.value })}
+                              />
+                            </div>
+                            <div className="mcp-labelled">
+                              <span className="mcp-label">{t("Directorio")}</span>
+                              <input
+                                className="mcp-field"
+                                value={row.cwd}
+                                placeholder={t("directorio de trabajo (opcional)")}
+                                onChange={(e) => editMcp(i, { cwd: e.target.value })}
+                              />
+                            </div>
+                            <div className="mcp-labelled">
+                              <span className="mcp-label">{t("Argumentos")}</span>
+                              <input
+                                className="mcp-field"
+                                value={row.args.join(" ")}
+                                placeholder={t("separados por espacio")}
+                                onChange={(e) =>
+                                  editMcp(i, { args: e.target.value.split(/\s+/).filter(Boolean) })
+                                }
+                              />
+                            </div>
+                            <div className="mcp-labelled">
+                              <span className="mcp-label">{t("Imagen de contenedor")}</span>
+                              <input
+                                className="mcp-field"
+                                value={row.image}
+                                placeholder={t("ghcr.io/usuario/servidor:tag (opcional, en vez del ejecutable)")}
+                                onChange={(e) => editMcp(i, { image: e.target.value })}
+                              />
+                            </div>
+                            <div className="mcp-labelled">
+                              <span className="mcp-label">{t("URL pública")}</span>
+                              <input
+                                className="mcp-field"
+                                value={row.publicUrl}
+                                placeholder={t("https://host:8443")}
+                                onChange={(e) => editMcp(i, { publicUrl: e.target.value })}
+                              />
+                            </div>
                             {/* El nombre del túnel, no su URL: el routing y las
                                 credenciales viven en ~/.cloudflared, que es el
                                 contrato de Cloudflare. Con nombre acá, edgePass
                                 arranca y para el conector junto con el server. */}
-                            <input
-                              className="mcp-field"
-                              value={row.tunnel}
-                              placeholder={t("túnel nombrado (cloudflared tunnel run …) — opcional")}
-                              title="Nombre del túnel de Cloudflare que publica este servidor. edgePass lo arranca y lo para junto con el servidor, y el LED MCP sólo dice «encendido» si el conector está conectado."
-                              onChange={(e) => editMcp(i, { tunnel: e.target.value })}
-                            />
+                            <div className="mcp-labelled">
+                              <span className="mcp-label">{t("Túnel nombrado")}</span>
+                              <input
+                                className="mcp-field"
+                                value={row.tunnel}
+                                placeholder={t("opcional (cloudflared tunnel run …)")}
+                                title="Nombre del túnel de Cloudflare que publica este servidor. edgePass lo arranca y lo para junto con el servidor, y el LED MCP sólo dice «encendido» si el conector está conectado."
+                                onChange={(e) => editMcp(i, { tunnel: e.target.value })}
+                              />
+                            </div>
                             {url !== "" && (
                               <div className="mcp-line">
                                 <code className="mcp-url">{url}</code>
@@ -4110,7 +4167,7 @@ export default function App() {
                         );
                       })}
                       {mcpDrafts.length === 0 && (
-                        <p className="hint">{t("Todavía no hay servidores MCP. Con comando, argumentos y «auto» alcanza para darle persistencia de ejecución a un server como reasonixmcp.")}</p>
+                        <p className="hint">{t("Todavía no hay servidores MCP. Alcanza con un ejecutable y sus argumentos, o una imagen, o una URL pública. Con «auto» el servidor arranca junto con edgePass, y eso es la persistencia.")}</p>
                       )}
                     </div>
 
@@ -4125,10 +4182,74 @@ export default function App() {
                       <button
                         className="pill-btn"
                         type="button"
+                        onClick={() => {
+                          const next = !showMcpJson;
+                          setShowMcpJson(next);
+                          // Opening it pre-fills with what is on screen: copy out
+                          // is the other half of paste in.
+                          if (next && !mcpJsonText.trim()) {
+                            setMcpJsonText(JSON.stringify(mcpDrafts, null, 2));
+                          }
+                        }}
+                        title={t("Pegar o copiar servidores como JSON")}
+                      >
+                        {showMcpJson ? t("Ocultar JSON") : t("JSON")}
+                      </button>
+                      <button
+                        className="pill-btn"
+                        type="button"
                         disabled={busy}
                         onClick={() => void saveMcp()}
                       >{t("Guardar")}</button>
                     </div>
+                    {showMcpJson && (
+                      <div className="meter-json">
+                        <textarea
+                          className="meter-json-input"
+                          value={mcpJsonText}
+                          onChange={(e) => setMcpJsonText(e.target.value)}
+                          spellCheck={false}
+                          placeholder={'[{"label":"mi-servidor","command":"C:\\\\ruta\\\\mcp.exe","args":["--port","9000"]}]'}
+                          rows={8}
+                        />
+                        <div className="settings-row">
+                          <button
+                            className="pill-btn"
+                            type="button"
+                            disabled={!mcpJsonText.trim()}
+                            onClick={() => {
+                              try {
+                                const parsed = parseMcpJson(mcpJsonText);
+                                setMcpDrafts((rows) => [...rows, ...parsed]);
+                                setMcpJsonText("");
+                                setShowMcpJson(false);
+                                setMcpMsg(
+                                  `${parsed.length} ${parsed.length === 1 ? "servidor agregado" : "servidores agregados"}. Guardá para aplicarlos.`,
+                                );
+                              } catch (e) {
+                                setMcpMsg(`JSON inválido: ${e instanceof Error ? e.message : String(e)}`);
+                              }
+                            }}
+                          >{t("Agregar a la lista")}</button>
+                          <button
+                            className="ghost"
+                            type="button"
+                            disabled={!mcpDrafts.length}
+                            onClick={() => {
+                              void invoke("copy_to_clipboard", {
+                                text: JSON.stringify(mcpDrafts, null, 2),
+                              });
+                              setMcpMsg(
+                                `${mcpDrafts.length} ${mcpDrafts.length === 1 ? "servidor copiado" : "servidores copiados"} como JSON.`,
+                              );
+                            }}
+                          >{t("Copiar JSON")}</button>
+                        </div>
+                        <p className="meter-json-hint">
+                          {t("Un objeto o una lista. Campos: label, command, args, cwd, image, env, secretEnv, publicUrl, tunnel, path, autostart. Lo que falte toma el valor vacío.")}
+                        </p>
+                      </div>
+                    )}
                     {mcpMsg && <pre className="mcp-msg">{mcpMsg}</pre>}
                   </motion.div>
                 )}
