@@ -33,7 +33,8 @@ policies and short-lived credentials. See [docs/PREREQUISITES.md](docs/PREREQUIS
 
 | Component | Minimum | Notes |
 |---|---|---|
-| Windows | 10 1809+ | The widget is Tauri 2. macOS support is planned. |
+| Windows | 10 1809+ | The widget is Tauri 2. This is the only released build. |
+| macOS | Not yet | No release artifact. The UI compiles, but the agent pipe, autostart and process/service probes are Windows-only (see below). |
 | WebView2 | Evergreen | Ships with Windows 11. Windows 10 may need the runtime. |
 | OpenBao | 2.x | Local, listening on `127.0.0.1:8200`. |
 | Docker | Optional | Needed only for the CI runner LEDs. |
@@ -53,6 +54,21 @@ missing. From there:
 edgePass does not install OpenBao, does not start a service that is not there, and
 does not invent a token. If the Windows service `OpenBao` exists but is stopped, it
 offers to start it. An agent sees the same answer in `{"op":"status"}` → `setup`.
+
+## macOS
+
+There is **no macOS build yet**, and the Windows setup is not it. The Tauri UI,
+the vault client, the keychain and the search index are portable, but the pieces
+that make edgePass a console are Windows-specific today:
+
+- the agent pipe (`ipc::spawn` is a no-op off Windows);
+- start-at-logon (`schtasks`) and the OpenBao Windows service;
+- process probes (`tasklist`), the runner and the MCP sweep.
+
+A real macOS port needs a Unix domain socket with the same JSON protocol,
+`launchd` for autostart, `ps`/`pgrep` for the probes, a macOS CI job, and a
+Developer ID signature plus notarization. Until then, on a Mac use OpenBao
+directly (`brew install openbao`).
 
 ## Install
 
