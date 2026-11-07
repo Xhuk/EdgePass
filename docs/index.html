@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>edgePass — a local OpenBao console for Windows</title>
+<meta name="description" content="A desktop widget that administers a local OpenBao vault and hands secrets to child processes through their environment — never through chat, logs or a command line.">
+<link rel="canonical" href="https://xhuk.github.io/EdgePass/">
+<link rel="icon" href="./icon.png" type="image/png">
+<meta property="og:type" content="website">
+<meta property="og:title" content="edgePass — a local OpenBao console for Windows">
+<meta property="og:description" content="Secrets your agents can use. Values they never see.">
+<meta property="og:url" content="https://xhuk.github.io/EdgePass/">
+<meta property="og:image" content="https://xhuk.github.io/EdgePass/icon.png">
+<meta name="twitter:card" content="summary">
+<!-- Search Console: paste the token and uncomment when verifying the URL-prefix property.
+<meta name="google-site-verification" content="PASTE_TOKEN_HERE">
+-->
+<style>
+  :root {
+    --ink: #14181d;
+    --ink-soft: #3d4753;
+    --muted: #5b6672;
+    --line: #e3e7eb;
+    --soft: #f6f7f8;
+    --amber: #f2b93c;
+    --cyan: #22b8d6;
+    --radius: 14px;
+    --wrap: 1080px;
+    --mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    color: var(--ink);
+    background: #fff;
+    line-height: 1.6;
+    font-size: 17px;
+  }
+  .wrap { width: min(100% - 2.5rem, var(--wrap)); margin-inline: auto; }
+  a { color: var(--ink); }
+  a:hover { color: #000; }
+  :focus-visible { outline: 3px solid var(--cyan); outline-offset: 3px; border-radius: 4px; }
+
+  .skip {
+    position: absolute; left: -9999px; top: 0; background: #fff;
+    padding: .7rem 1rem; border: 1px solid var(--line); z-index: 10;
+  }
+  .skip:focus { left: 1rem; top: 1rem; }
+
+  /* nav */
+  header.nav {
+    border-bottom: 1px solid var(--line);
+    position: sticky; top: 0; background: rgba(255,255,255,.92);
+    backdrop-filter: saturate(1.6) blur(8px); z-index: 5;
+  }
+  .nav-inner {
+    display: flex; align-items: center; gap: 1.25rem;
+    min-height: 62px; flex-wrap: wrap;
+  }
+  .brand { display: flex; align-items: center; gap: .6rem; text-decoration: none; font-weight: 650; letter-spacing: -.01em; }
+  .brand img { width: 26px; height: 26px; display: block; }
+  .nav-links { margin-left: auto; display: flex; gap: 1.15rem; flex-wrap: wrap; }
+  .nav-links a {
+    text-decoration: none; color: var(--muted); font-size: .94rem; font-weight: 500;
+  }
+  .nav-links a:hover { color: var(--ink); }
+
+  /* hero */
+  .hero { padding: clamp(2.5rem, 7vw, 5.5rem) 0 clamp(2rem, 5vw, 3.5rem); }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: .55rem;
+    font-family: var(--mono); font-size: .76rem; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--muted);
+    border: 1px solid var(--line); border-radius: 999px;
+    padding: .3rem .75rem; margin: 0 0 1.4rem;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--cyan); }
+  h1 {
+    font-size: clamp(2.05rem, 5.4vw, 3.5rem);
+    line-height: 1.06; letter-spacing: -.035em; font-weight: 700;
+    margin: 0 0 1.1rem; max-width: 20ch;
+  }
+  h1 .accent { color: var(--ink); background: linear-gradient(transparent 72%, rgba(34,184,214,.28) 72%); }
+  .lede { font-size: clamp(1.02rem, 1.6vw, 1.2rem); color: var(--ink-soft); max-width: 62ch; margin: 0 0 1.9rem; }
+  .cta { display: flex; gap: .7rem; flex-wrap: wrap; margin-bottom: 2.2rem; }
+  .btn {
+    display: inline-flex; align-items: center; gap: .5rem;
+    padding: .72rem 1.15rem; border-radius: 10px; text-decoration: none;
+    font-weight: 600; font-size: .96rem; border: 1px solid transparent;
+    transition: transform .12s ease, background-color .12s ease, border-color .12s ease;
+  }
+  .btn-primary { background: var(--ink); color: #fff; }
+  .btn-primary:hover { background: #000; color: #fff; transform: translateY(-1px); }
+  .btn-ghost { border-color: var(--line); color: var(--ink); }
+  .btn-ghost:hover { border-color: #c9d0d6; background: var(--soft); }
+
+  .install { display: grid; gap: .6rem; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); max-width: 720px; }
+  .cmd {
+    display: flex; align-items: center; gap: .75rem;
+    background: var(--soft); border: 1px solid var(--line); border-radius: 10px;
+    padding: .6rem .8rem; font-family: var(--mono); font-size: .84rem;
+    overflow-x: auto; white-space: nowrap;
+  }
+  .cmd span.tag {
+    font-family: var(--sans); font-size: .68rem; letter-spacing: .07em;
+    text-transform: uppercase; color: var(--muted); font-weight: 700;
+    min-width: 4.2rem;
+  }
+  .cmd code { color: var(--ink); }
+  .hint { color: var(--muted); font-size: .86rem; margin: .7rem 0 0; }
+
+  /* sections */
+  section { padding: clamp(2.6rem, 6vw, 4.4rem) 0; border-top: 1px solid var(--line); }
+  .kicker {
+    font-family: var(--mono); font-size: .74rem; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--muted); margin: 0 0 .7rem;
+  }
+  h2 { font-size: clamp(1.4rem, 2.6vw, 1.95rem); line-height: 1.15; letter-spacing: -.025em; margin: 0 0 .6rem; }
+  .sub { color: var(--muted); max-width: 64ch; margin: 0 0 2rem; }
+
+  .grid { display: grid; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+  .grid-3 { grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+  .grid-2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .cell { background: #fff; padding: 1.35rem 1.4rem; }
+  .cell h3 { font-size: 1rem; margin: 0 0 .35rem; letter-spacing: -.01em; }
+  .cell p { margin: 0; color: var(--muted); font-size: .93rem; }
+  .cell code, .hint code { font-family: var(--mono); font-size: .86em; background: var(--soft); border: 1px solid var(--line); border-radius: 5px; padding: .06em .34em; }
+
+  .mark { width: 22px; height: 3px; border-radius: 2px; margin-bottom: .8rem; }
+  .mark-leak { background: var(--amber); }
+  .mark-do { background: var(--cyan); }
+
+  .steps { list-style: none; padding: 0; margin: 0; counter-reset: s; display: grid; gap: 0; border-top: 1px solid var(--line); }
+  .steps li {
+    display: grid; grid-template-columns: 2.6rem 1fr; gap: 1rem;
+    padding: 1.05rem 0; border-bottom: 1px solid var(--line); align-items: start;
+    counter-increment: s;
+  }
+  .steps li::before {
+    content: counter(s, decimal-leading-zero);
+    font-family: var(--mono); font-size: .8rem; color: var(--muted); padding-top: .28rem;
+  }
+  .steps strong { display: block; margin-bottom: .1rem; }
+  .steps p { margin: 0; color: var(--muted); font-size: .93rem; }
+
+  .note {
+    border: 1px solid var(--line); border-left: 3px solid var(--amber);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    background: #fffdf7; padding: 1.1rem 1.3rem; color: var(--ink-soft);
+    font-size: .94rem;
+  }
+  .note strong { color: var(--ink); }
+
+  .facts { display: flex; flex-wrap: wrap; gap: .5rem; margin: 1.4rem 0 0; padding: 0; list-style: none; }
+  .facts li {
+    font-size: .82rem; color: var(--muted); border: 1px solid var(--line);
+    border-radius: 999px; padding: .22rem .7rem; background: #fff;
+  }
+
+  footer { border-top: 1px solid var(--line); padding: 2.2rem 0 3rem; color: var(--muted); font-size: .88rem; }
+  .foot-links { display: flex; gap: 1.2rem; flex-wrap: wrap; margin-bottom: 1rem; }
+  .foot-links a { color: var(--ink-soft); text-decoration: none; }
+  .foot-links a:hover { text-decoration: underline; }
+  .fine { max-width: 78ch; }
+  @media (prefers-reduced-motion: reduce) { .btn { transition: none; } .btn:hover { transform: none; } }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="nav">
+  <div class="wrap nav-inner">
+    <a class="brand" href="./">
+      <img src="./icon.png" alt="" width="26" height="26">
+      edgePass
+    </a>
+    <nav class="nav-links" aria-label="Main">
+      <a href="#problem">Why</a>
+      <a href="#does">What it does</a>
+      <a href="#start">Install</a>
+      <a href="https://github.com/Xhuk/EdgePass">GitHub</a>
+      <a href="https://github.com/Xhuk/EdgePass/releases/latest">Releases</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <div class="wrap hero">
+    <p class="eyebrow"><span class="dot" aria-hidden="true"></span>Windows · Tauri 2 · MIT · v0.5.1</p>
+    <h1>Secrets your agents can use. <span class="accent">Values they never see.</span></h1>
+    <p class="lede">
+      edgePass is a local <strong>OpenBao</strong> console for Windows. It hands a secret to a child
+      process through its environment — never through a chat message, a log line or a command line.
+      You do not need to know Vault: install OpenBao, initialize it, paste a token.
+    </p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/Xhuk/EdgePass/releases/latest">Download for Windows</a>
+      <a class="btn btn-ghost" href="https://github.com/Xhuk/EdgePass/blob/main/skills/edgepass/SKILL.md">Read the agent contract</a>
+    </div>
+
+    <div class="install">
+      <p class="cmd"><span class="tag">winget</span><code>winget install Xhuk.EdgePass</code></p>
+      <p class="cmd"><span class="tag">scoop</span><code>scoop bucket add xhuk https://github.com/Xhuk/scoop-bucket; scoop install edgepass</code></p>
+    </div>
+    <p class="hint">OpenBao 2.x on <code>127.0.0.1:8200</code> is required. The installer is per-user and needs no administrator rights.</p>
+  </div>
+
+  <section id="problem">
+    <div class="wrap">
+      <p class="kicker">The problem</p>
+      <h2>The leak happens before the code</h2>
+      <p class="sub">When an agent writes the code and runs the commands, a credential has three easy ways out — and all three look harmless at the moment they happen.</p>
+      <div class="grid grid-3">
+        <div class="cell">
+          <div class="mark mark-leak" aria-hidden="true"></div>
+          <h3>A key in a .env file</h3>
+          <p>Committed by accident, then copied into every container and every backup.</p>
+        </div>
+        <div class="cell">
+          <div class="mark mark-leak" aria-hidden="true"></div>
+          <h3>A token pasted into a chat</h3>
+          <p>It stays in the transcript, in the model's context and in whatever logs the harness keeps.</p>
+        </div>
+        <div class="cell">
+          <div class="mark mark-leak" aria-hidden="true"></div>
+          <h3>A secret in a command line</h3>
+          <p>Visible in shell history, in the process list and in any screenshot taken for a bug report.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="does">
+    <div class="wrap">
+      <p class="kicker">What it does</p>
+      <h2>A console, not a server</h2>
+      <p class="sub">edgePass administers a vault that runs on the same machine. It does not serve secrets to your containers — OpenBao does that — and it never keeps its own copy.</p>
+      <div class="grid grid-2">
+        <div class="cell">
+          <div class="mark mark-do" aria-hidden="true"></div>
+          <h3>Lists, searches and copies secrets</h3>
+          <p>From a local OpenBao, on both KV v1 and KV v2 mounts. The mount version is detected, so the paths are the right ones.</p>
+        </div>
+        <div class="cell">
+          <div class="mark mark-do" aria-hidden="true"></div>
+          <h3>Injects into a child process by environment</h3>
+          <p>A secret reaches the process that needs it through its environment, never as an argument. It is not persisted anywhere.</p>
+        </div>
+        <div class="cell">
+          <div class="mark mark-do" aria-hidden="true"></div>
+          <h3>Opens the vault when needed, seals it on demand</h3>
+          <p>The widget watches the seal state and can seal the vault after a period of inactivity.</p>
+        </div>
+        <div class="cell">
+          <div class="mark mark-do" aria-hidden="true"></div>
+          <h3>Finds secrets by name, with tokens</h3>
+          <p>Complementary tokens, all of them: <code>infisi cb2</code> means Infisical plus the path <code>cb2</code>.</p>
+        </div>
+        <div class="cell">
+          <div class="mark mark-do" aria-hidden="true"></div>
+          <h3>Speaks a named-pipe contract</h3>
+          <p>Any local agent can ask for a secret without receiving the value: it asks the widget to place it in the child's environment.</p>
+        </div>
+        <div class="cell">
+          <div class="mark mark-do" aria-hidden="true"></div>
+          <h3>Watches the local CI runner</h3>
+          <p>When the self-hosted GitHub Actions runner stops, the widget says so and can repair it.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="limits">
+    <div class="wrap">
+      <p class="kicker">Limits</p>
+      <h2>What it does not do</h2>
+      <p class="sub">Said plainly, because this software holds credentials and the boundary is the point.</p>
+      <div class="grid grid-2">
+        <div class="cell"><h3>It does not replace OpenBao</h3><p>OpenBao is a prerequisite, not an optional dependency. Without a vault, edgePass has nothing to talk to.</p></div>
+        <div class="cell"><h3>It does not run a public endpoint</h3><p>Every request must go to loopback. It does not serve secrets to containers and does not keep a copy of the vault.</p></div>
+        <div class="cell"><h3>It does not print, log or write values</h3><p>Not to the pipe, not to disk. The metadata index is kept; the values are not.</p></div>
+        <div class="cell"><h3>It is not audited</h3><p>Version 0.5.1, early, interfaces can change between minor versions. Read <a href="https://github.com/Xhuk/EdgePass/blob/main/DISCLAIMER.md">DISCLAIMER.md</a> first.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="start">
+    <div class="wrap">
+      <p class="kicker">Quick start</p>
+      <h2>Four steps to the first secret</h2>
+      <p class="sub">Windows only for now. macOS and Linux are ports, not build flags — see the repository for what is missing.</p>
+      <ol class="steps">
+        <li>
+          <div><strong>Install and start OpenBao</strong><p>Local, listening on <code>127.0.0.1:8200</code>. The prerequisites page covers install, service and seal.</p></div>
+        </li>
+        <li>
+          <div><strong>Initialize and unseal it</strong><p>Keep the init file off every repository and out of every cloud sync folder.</p></div>
+        </li>
+        <li>
+          <div><strong>Run the edgePass installer</strong><p>Per-user, no administrator rights. The pill docks to a screen edge.</p></div>
+        </li>
+        <li>
+          <div><strong>Set the address and load the token</strong><p>Config → Vault. The token goes to the Windows keychain, not to a config file.</p></div>
+        </li>
+      </ol>
+      <div class="note" style="margin-top:1.6rem">
+        <strong>Give the skill to your agent.</strong> The installer ships the app, not the agent
+        instructions. Run <code>powershell -File scripts\install-skills.ps1</code>, then say
+        <em>“usa edge pass”</em>. The agent asks the widget to inject the value; it never sees it.
+      </div>
+      <ul class="facts" aria-label="At a glance">
+        <li>Windows 10 1809+</li>
+        <li>WebView2 evergreen</li>
+        <li>OpenBao 2.x</li>
+        <li>Docker optional (CI LEDs)</li>
+        <li>MIT license</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="foot-links">
+      <a href="https://github.com/Xhuk/EdgePass">Repository</a>
+      <a href="https://github.com/Xhuk/EdgePass/releases">Releases</a>
+      <a href="https://github.com/Xhuk/EdgePass/tree/main/docs">Docs</a>
+      <a href="https://github.com/Xhuk/EdgePass/blob/main/skills/edgepass/SKILL.md">Agent skill</a>
+      <a href="https://github.com/Xhuk/EdgePass/blob/main/LICENSE">MIT</a>
+    </div>
+    <p class="fine">
+      <strong>On the name.</strong> edgePass is also a mobile puzzle, a bridge pass, an optical filter and
+      a course. This project is none of those: it is a local OpenBao console for Windows. The name is
+      used descriptively, with no affiliation.
+    </p>
+    <p class="fine">This software manages credentials. A mistake can expose or destroy them.</p>
+  </div>
+</footer>
+</body>
+</html>
