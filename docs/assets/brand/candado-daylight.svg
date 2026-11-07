@@ -9,7 +9,8 @@
       </g>
     </mask>
   </defs>
-  <g mask="url(#keyhole)" transform="translate(256 256)">
+  <g mask="url(#keyhole)">
+    <g transform="translate(256 256)">
     <g transform="rotate(-45)">
       <rect x="-76" y="-124" width="152" height="248" rx="76" fill="none"
             stroke="#0284C7" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
@@ -17,6 +18,7 @@
     </g>
     <g transform="rotate(45)">
       <rect x="-124" y="-15" width="248" height="30" rx="15" fill="#065F46"/>
+    </g>
     </g>
   </g>
 </svg>

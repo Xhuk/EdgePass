@@ -24,23 +24,25 @@ export function LogoMark({
             </g>
           </mask>
         </defs>
-        <g mask="url(#ep-keyhole)" transform="translate(256 256)">
-          <g transform="rotate(-45)">
-            <rect
-              x="-76"
-              y="-124"
-              width="152"
-              height="248"
-              rx="76"
-              stroke="#00E5FF"
-              strokeWidth="20"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <rect x="-52" y="-100" width="104" height="200" rx="52" fill="#79FBBD" />
-          </g>
-          <g transform="rotate(45)">
-            <rect x="-124" y="-15" width="248" height="30" rx="15" fill="#79FBBD" />
+        <g mask="url(#ep-keyhole)">
+          <g transform="translate(256 256)">
+            <g transform="rotate(-45)">
+              <rect
+                x="-76"
+                y="-124"
+                width="152"
+                height="248"
+                rx="76"
+                stroke="#00E5FF"
+                strokeWidth="20"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <rect x="-52" y="-100" width="104" height="200" rx="52" fill="#79FBBD" />
+            </g>
+            <g transform="rotate(45)">
+              <rect x="-124" y="-15" width="248" height="30" rx="15" fill="#79FBBD" />
+            </g>
           </g>
         </g>
       </svg>
