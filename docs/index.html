@@ -98,19 +98,22 @@
   .btn-ghost { border-color: var(--line); color: var(--ink); }
   .btn-ghost:hover { border-color: #c9d0d6; background: var(--soft); }
 
-  .install { display: grid; gap: .6rem; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); max-width: 720px; }
+  .install { display: grid; gap: .6rem; grid-template-columns: 1fr; max-width: 640px; }
   .cmd {
-    display: flex; align-items: center; gap: .75rem;
+    display: flex; align-items: flex-start; gap: .75rem;
     background: var(--soft); border: 1px solid var(--line); border-radius: 10px;
-    padding: .6rem .8rem; font-family: var(--mono); font-size: .84rem;
-    overflow-x: auto; white-space: nowrap;
+    padding: .65rem .8rem; font-family: var(--mono); font-size: .84rem;
+    margin: 0;
   }
   .cmd span.tag {
     font-family: var(--sans); font-size: .68rem; letter-spacing: .07em;
     text-transform: uppercase; color: var(--muted); font-weight: 700;
-    min-width: 4.2rem;
+    flex: 0 0 4.2rem; padding-top: .18rem;
   }
-  .cmd code { color: var(--ink); }
+  .cmd code {
+    color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere;
+    line-height: 1.5;
+  }
   .hint { color: var(--muted); font-size: .86rem; margin: .7rem 0 0; }
 
   /* sections */
