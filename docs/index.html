@@ -172,6 +172,15 @@
     border-radius: 999px; padding: .22rem .7rem; background: #fff;
   }
 
+  .invoke-title { font-size: 1.02rem; margin: 2.2rem 0 .35rem; letter-spacing: -.01em; }
+  .invoke-wrap { border: 1px solid var(--line); border-radius: var(--radius); overflow-x: auto; }
+  .invoke { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  .invoke th, .invoke td { text-align: left; padding: .55rem .9rem; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .invoke thead th { font-family: var(--mono); font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .invoke tbody td:first-child { color: var(--muted); }
+  .invoke tbody tr:last-child td { border-bottom: 0; }
+  .invoke code { font-family: var(--mono); font-size: .86em; }
+
   footer { border-top: 1px solid var(--line); padding: 2.2rem 0 3rem; color: var(--muted); font-size: .88rem; }
   .foot-links { display: flex; gap: 1.2rem; flex-wrap: wrap; margin-bottom: 1rem; }
   .foot-links a { color: var(--ink-soft); text-decoration: none; }
@@ -328,9 +337,15 @@
       </ol>
       <div class="note" style="margin-top:1.6rem">
         <strong>Give the skill to your agent.</strong> The installer ships the app, not the agent
-        instructions. Run <code>powershell -File scripts\install-skills.ps1</code>, then say
-        <em>“usa edge pass”</em>. The agent asks the widget to inject the value; it never sees it.
+        instructions. Run <code>powershell -File scripts\install-skills.ps1</code>, then ask in your
+        own language: <em>“use edgepass”</em>. The agent asks the widget to inject the value; it
+        never sees it.
+        <br><br>
+        <strong>Dale la skill a tu agente.</strong> El instalador trae la app, no las instrucciones
+        del agente. Corré <code>powershell -File scripts\install-skills.ps1</code> y pedilo en tu
+        idioma: <em>“usa edgepass”</em>. El agente le pide al widget que inyecte el valor; nunca lo ve.
       </div>
+
       <ul class="facts" aria-label="At a glance">
         <li>Windows 10 1809+</li>
         <li>WebView2 evergreen</li>
@@ -338,6 +353,31 @@
         <li>Docker optional (CI LEDs)</li>
         <li>MIT license</li>
       </ul>
+
+      <h3 class="invoke-title">Multi-language invocation</h3>
+      <p class="hint" style="margin:0 0 .9rem">
+        The phrase is the trigger, not a translation exercise. Say it next to what you need.
+      </p>
+      <div class="invoke-wrap">
+        <table class="invoke">
+          <thead>
+            <tr><th>Language</th><th>Invoke in chat</th><th>Example</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>English</td><td><code>use edgepass</code></td><td>use edgepass to verify this token</td></tr>
+            <tr><td>Español</td><td><code>usa edgepass</code></td><td>usa edgepass para validar este acceso</td></tr>
+            <tr><td>Português</td><td><code>use o edgepass</code></td><td>use o edgepass para verificar a sessão</td></tr>
+            <tr><td>Français</td><td><code>utilise edgepass</code></td><td>utilise edgepass pour auditer</td></tr>
+            <tr><td>Deutsch</td><td><code>nutze edgepass</code></td><td>nutze edgepass um den Schlüssel zu prüfen</td></tr>
+            <tr><td>Italiano</td><td><code>usa edgepass</code></td><td>usa edgepass per verificare l'accesso</td></tr>
+            <tr><td>Nederlands</td><td><code>gebruik edgepass</code></td><td>gebruik edgepass om dit te controleren</td></tr>
+            <tr><td>日本語</td><td><code>edgepassを使って</code></td><td>edgepassを使ってこのアクセスを確認して</td></tr>
+            <tr><td>한국어</td><td><code>edgepass 써줘</code></td><td>edgepass 써줘서 세션 확인해줘</td></tr>
+            <tr><td>中文</td><td><code>使用 edgepass</code></td><td>使用 edgepass 验证此令牌</td></tr>
+            <tr><td>Русский</td><td><code>используй edgepass</code></td><td>используй edgepass для проверки токена</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </section>
 </main>

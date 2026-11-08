@@ -1,6 +1,6 @@
 ---
 name: edgepass
-description: Use edgePass, the local OpenBao secret widget, from an agent. Trigger on any request to use edgePass in any language or spelling — "usa edge pass", "use edge pass", "use edgepass", "utilise edge pass", "verwende edge pass", "edge pass を使って", "使用 edge pass" — and on "dame la contraseña de", "do we have credentials for", "corré esto con el secreto", "run this with the secret", "está abierto el vault", "is the vault open". Ask the human for a credential in the widget, search secrets by name, run a command with secrets in the child environment, request permission with a popup, or read vault health.
+description: Use edgePass, the local OpenBao secret widget, from an agent. Trigger on any request to use edgePass in any language or spelling — "use edgepass", "usa edgepass", "use o edgepass", "utilise edgepass", "nutze edgepass", "usa edgepass", "gebruik edgepass", "edgepassを使って", "edgepass 써줘", "使用 edgepass", "используй edgepass" — and on "dame la contraseña de", "do we have credentials for", "corré esto con el secreto", "run this with the secret", "está abierto el vault", "is the vault open". Ask the human for a credential in the widget, search secrets by name, run a command with secrets in the child environment, request permission with a popup, or read vault health.
 ---
 
 # edgePass — how an agent uses it
@@ -13,6 +13,20 @@ never does.
 
 The phrase means **"go to the widget"**. There is no fixed spelling: any equivalent of
 "use edgePass" in any language counts, and so does a bare phrase with no object.
+
+| Language | The human says |
+|---|---|
+| English | `use edgepass` |
+| Español | `usa edgepass` |
+| Português | `use o edgepass` |
+| Français | `utilise edgepass` |
+| Deutsch | `nutze edgepass` |
+| Italiano | `usa edgepass` |
+| Nederlands | `gebruik edgepass` |
+| 日本語 | `edgepassを使って` |
+| 한국어 | `edgepass 써줘` |
+| 中文 | `使用 edgepass` |
+| Русский | `используй edgepass` |
 
 | The human says | Do this |
 |---|---|
