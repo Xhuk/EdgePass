@@ -123,7 +123,8 @@ Agents drive the app through a named pipe, one JSON object per line. The full
 contract lives in [skills/edgepass/SKILL.md](skills/edgepass/SKILL.md). That file is
 plain Markdown on purpose: any agent, with any harness, can read it.
 
-The Spanish operations manual is [docs/OPERATIONS.es.md](docs/OPERATIONS.es.md).
+The operations manual is [docs/OPERATIONS.md](docs/OPERATIONS.md); in Spanish,
+[docs/OPERATIONS.es.md](docs/OPERATIONS.es.md).
 
 ## Backup
 

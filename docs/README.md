@@ -9,7 +9,8 @@ generated mirror of these files — edit here, never there.
 | Document | Read it when |
 |---|---|
 | [PREREQUISITES.md](PREREQUISITES.md) | Before the first install: OpenBao, WebView2, what the vault needs. |
-| [OPERATIONS.es.md](OPERATIONS.es.md) | Day-to-day use, in Spanish: secrets, LEDs, the agent pipe. |
+| [OPERATIONS.md](OPERATIONS.md) | Day-to-day use: secrets, LEDs, the agent pipe. English source. |
+| [OPERATIONS.es.md](OPERATIONS.es.md) | The same manual in Spanish. |
 | [SECURITY.md](SECURITY.md) | You want the threat model and how to report a problem. |
 | [BACKUP.md](BACKUP.md) | Before storing the first real secret: snapshots, init file, restore drill. |
 
