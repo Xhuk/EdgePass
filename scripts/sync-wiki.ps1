@@ -16,7 +16,7 @@ param(
   [switch]$WhatIf
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 $root = Split-Path $PSScriptRoot -Parent
 $docs = Join-Path $root "docs"
 $tmp = Join-Path ([IO.Path]::GetTempPath()) ("edgepass-wiki-" + [Guid]::NewGuid().ToString("N").Substring(0, 8))
@@ -32,7 +32,7 @@ foreach ($p in $pages) { Write-Host "  $($p.Name) -> $([IO.Path]::GetFileNameWit
 
 if ($WhatIf) { Write-Host "(dry run: nothing pushed)"; return }
 
-git clone "https://github.com/$Repo.wiki.git" $tmp 2>$null
+git clone "https://github.com/$Repo.wiki.git" $tmp 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) {
   throw "the wiki repository does not exist yet: open https://github.com/$Repo/wiki and save a first page, then run this again"
 }
