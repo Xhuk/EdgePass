@@ -64,18 +64,31 @@ custom header is not dropped when the host changes. Something answering on
   does not remove SmartScreen warnings on machines that do not trust the root; a
   public CA certificate is the remaining step for that.
 
-## What is still open
+## Fixed after the 0.5.1 review
+
+| Severity | Finding | Where | How |
+|---|---|---|---|
+| Low | Errors forwarded the vault's JSON envelope, including `request_id` and `warnings` | `openbao.rs` | Only `errors[]` is forwarded; any other JSON body becomes `unexpected error body`. The status code still says what happened. |
+| Low | `localhost` was accepted by name, so a poisoned `hosts` file could redirect the token | `net.rs` | `canonical_loopback` rewrites `localhost` to `127.0.0.1` before any URL is built; the name never reaches the resolver. A non-loopback host is refused. |
+
+## What is still open (accepted)
 
 | Severity | Finding | Where |
 |---|---|---|
 | Medium | `{"op":"seal"}` asks no human for confirmation | `ipc.rs` |
-| Low | Errors forward vault JSON including `request_id` and `warnings` | `ipc.rs` |
-| Low | `localhost` is accepted by name: a poisoned `hosts` file redirects the token | `net.rs` |
 | Info | `cmd /C` over `credential_command`; no pipe op writes configuration | `mcp.rs` |
 
 The `seal` finding is availability, not confidentiality. A process of the same
 user can seal the vault and cut off every consumer. There is no privileged account
-to prevent it.
+to prevent it, and a confirmation dialog would not stop that process — it can kill
+the `.exe`. It is accepted as a design decision: **what the dialog would protect
+against is a mistake, not an attacker**, so the rule lives where mistakes happen —
+the `edgepass` skill says sealing is a human action, and the KV LED is the button.
+
+`credential_command` runs through `cmd /C` because the owner may need a compound
+command. Config is executable either way, and **no pipe operation writes
+configuration**, so an agent cannot inject into it; it stays informational.
+
 
 ## What is right, and was measured
 

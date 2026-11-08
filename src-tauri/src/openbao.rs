@@ -323,7 +323,7 @@ async fn list_keys(
         let body = res.text().await.unwrap_or_default();
         return Err(BaoError::Msg(format!(
             "list failed ({status}): {}",
-            truncate(&body, 180)
+            error_text(&body, 180)
         )));
     }
 
@@ -352,7 +352,7 @@ async fn read_secret_keys(
         let body = res.text().await.unwrap_or_default();
         return Err(BaoError::Msg(format!(
             "read failed ({status}): {}",
-            truncate(&body, 180)
+            error_text(&body, 180)
         )));
     }
 
@@ -387,7 +387,7 @@ pub async fn read_secret_value(
         let body = res.text().await.unwrap_or_default();
         return Err(BaoError::Msg(format!(
             "read value failed ({status}): {}",
-            truncate(&body, 180)
+            error_text(&body, 180)
         )));
     }
 
@@ -424,7 +424,7 @@ pub async fn read_secret_map(
         let body = res.text().await.unwrap_or_default();
         return Err(BaoError::Msg(format!(
             "read map failed ({status}): {}",
-            truncate(&body, 180)
+            error_text(&body, 180)
         )));
     }
 
@@ -481,7 +481,7 @@ pub async fn upsert_secret_field(
             let body = existing.text().await.unwrap_or_default();
             return Err(BaoError::Msg(format!(
                 "read before write failed ({status}): {}",
-                truncate(&body, 180)
+                error_text(&body, 180)
             )));
         };
         obj.insert(key.to_string(), Value::String(value.to_string()));
@@ -533,12 +533,12 @@ async fn post_kv(
                 200 * u64::from(attempt + 1),
             ))
             .await;
-            last = truncate(&body, 120);
+            last = error_text(&body, 120);
             continue;
         }
         return Err(BaoError::Msg(format!(
             "write failed ({status}): {}",
-            truncate(&body, 180)
+            error_text(&body, 180)
         )));
     }
     Err(BaoError::Msg(format!(
@@ -584,7 +584,7 @@ pub async fn upsert_secret_map(
             let body = existing.text().await.unwrap_or_default();
             return Err(BaoError::Msg(format!(
                 "read before write failed ({status}): {}",
-                truncate(&body, 180)
+                error_text(&body, 180)
             )));
         }
     };
@@ -652,7 +652,7 @@ pub async fn delete_secret_path(
         let body = res.text().await.unwrap_or_default();
         return Err(BaoError::Msg(format!(
             "delete path failed ({status}): {}",
-            truncate(&body, 180)
+            error_text(&body, 180)
         )));
     }
     Ok(())
@@ -682,7 +682,7 @@ async fn list_child_namespaces(
         let body = res.text().await.unwrap_or_default();
         return Err(BaoError::Msg(format!(
             "namespaces list failed ({status}): {}",
-            truncate(&body, 180)
+            error_text(&body, 180)
         )));
     }
 
@@ -867,10 +867,42 @@ fn truncate(s: &str, max: usize) -> String {
     }
 }
 
+/// The vault's error body is JSON: `errors[]` is the message, but the envelope
+/// also carries `request_id`, `warnings` and other metadata. Forward only the
+/// human part, never the whole document.
+fn error_text(body: &str, max: usize) -> String {
+    if let Ok(v) = serde_json::from_str::<serde_json::Value>(body) {
+        if let Some(errs) = v.get("errors").and_then(|e| e.as_array()) {
+            let text = errs
+                .iter()
+                .filter_map(|e| e.as_str())
+                .collect::<Vec<_>>()
+                .join("; ");
+            if !text.is_empty() {
+                return truncate(&text, max);
+            }
+        }
+        return "unexpected error body".to_string();
+    }
+    truncate(body, max)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn error_text_forwards_only_the_vault_message() {
+        let body = r#"{"errors":["permission denied","on path kv/data/x"],"request_id":"3f2b","warnings":["lease soon"]}"#;
+        assert_eq!(
+            error_text(body, 180),
+            "permission denied; on path kv/data/x",
+            "request_id and warnings must not reach the UI, the log or an agent"
+        );
+        assert_eq!(error_text(r#"{"request_id":"3f2b"}"#, 180), "unexpected error body");
+        assert_eq!(error_text("plain text", 180), "plain text");
+    }
 
     #[test]
     fn a_not_active_node_is_retried_but_a_real_error_is_not() {

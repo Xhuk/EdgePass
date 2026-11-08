@@ -33,18 +33,39 @@ pub fn is_loopback(addr: &str) -> bool {
     }
 }
 
-pub fn assert_local(addr: &str) -> Result<(), String> {
-    if is_loopback(addr) {
-        return Ok(());
+/// Numeric loopback address for `addr`, or a clear error.
+///
+/// `localhost` is accepted but **rewritten to `127.0.0.1`**: the name is never
+/// handed to the resolver, so a poisoned `hosts` file cannot point the client —
+/// and the token — at another machine.
+pub fn canonical_loopback(addr: &str) -> Result<String, String> {
+    let url = Url::parse(addr).map_err(|e| format!("Invalid OpenBao address: {e}"))?;
+    match url.host() {
+        Some(Host::Ipv4(ip)) if ip.is_loopback() => Ok(addr.to_string()),
+        Some(Host::Ipv6(ip)) if ip.is_loopback() => Ok(addr.to_string()),
+        Some(Host::Domain(d)) if d.eq_ignore_ascii_case("localhost") => {
+            let mut u = url;
+            u.set_host(Some("127.0.0.1"))
+                .map_err(|e| format!("Invalid OpenBao address: {e}"))?;
+            Ok(u.to_string())
+        }
+        _ => Err(format!(
+            "Rejected '{}': edgePass only talks to OpenBao on loopback (127.0.0.1 / ::1 / localhost). \
+             That way the token never leaves this machine — change it in Settings if you really want another host.",
+            host_of(addr)
+        )),
     }
-    let host = Url::parse(addr)
+}
+
+fn host_of(addr: &str) -> String {
+    Url::parse(addr)
         .ok()
         .and_then(|u| u.host_str().map(|s| s.to_string()))
-        .unwrap_or_else(|| addr.to_string());
-    Err(format!(
-        "Rejected '{host}': edgePass only talks to OpenBao on loopback (127.0.0.1 / ::1 / localhost). \
-         That way the token never leaves this machine — change it in Settings if you really want another host."
-    ))
+        .unwrap_or_else(|| addr.to_string())
+}
+
+pub fn assert_local(addr: &str) -> Result<(), String> {
+    canonical_loopback(addr).map(|_| ())
 }
 
 /// Validated, proxy-free, redirect-free client for the configured address.
@@ -111,6 +132,9 @@ fn check_segment(seg: &str) -> Result<(), String> {
 /// Every `/`-separated piece is validated by [`check_segment`] before it lands
 /// in the URL, so a caller cannot read or write a path it did not declare.
 pub fn join_url(addr: &str, parts: &[&str]) -> Result<String, String> {
+    // Canonicalise first: `localhost` becomes a numeric loopback address here,
+    // so no URL ever reaches the resolver by name.
+    let addr = canonical_loopback(addr)?;
     let mut url = addr.trim_end_matches('/').to_string();
     for part in parts {
         let seg = part.trim_matches('/');
@@ -141,6 +165,27 @@ mod tests {
         assert!(!is_loopback("http://192.168.1.10:8200"));
         assert!(!is_loopback("https://vault.example.com"));
         assert!(!is_loopback("not a url"));
+    }
+
+    #[test]
+    fn localhost_is_rewritten_before_it_reaches_the_resolver() {
+        assert_eq!(
+            canonical_loopback("http://localhost:8200").unwrap(),
+            "http://127.0.0.1:8200/"
+        );
+        // numeric loopback is left alone
+        assert_eq!(
+            canonical_loopback("http://127.0.0.1:8200").unwrap(),
+            "http://127.0.0.1:8200"
+        );
+        // anything else is refused, name or not
+        assert!(canonical_loopback("https://vault.example.com").is_err());
+        assert!(canonical_loopback("http://192.168.1.10:8200").is_err());
+        // and the URL builder never emits the name
+        assert_eq!(
+            join_url("http://localhost:8200", &["v1", "sys", "health"]).unwrap(),
+            "http://127.0.0.1:8200/v1/sys/health"
+        );
     }
 
     #[test]
