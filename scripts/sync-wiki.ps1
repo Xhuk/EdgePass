@@ -56,8 +56,10 @@ try {
   git add -A
   git -c user.name="Xhuk" -c user.email="xhuk@users.noreply.github.com" commit -m $Message 2>$null
   if ($LASTEXITCODE -ne 0) { Write-Host "nothing to commit"; return }
-  git push origin HEAD 2>&1 | Select-Object -Last 2
+  git push origin HEAD 2>&1 | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "git push failed" }
   Write-Host "wiki updated: https://github.com/$Repo/wiki"
+  exit 0
 } finally {
   Pop-Location
   Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
