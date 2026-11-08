@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { TRANSLATIONS } from "./i18n";
+import { TRANSLATIONS, setLocale, t } from "./i18n";
 
 /**
  * Every `t("literal")` in the UI must have an English entry.
@@ -35,5 +35,16 @@ describe("i18n coverage", () => {
   it("translates every literal passed to t()", () => {
     const missing = [...usedKeys()].filter((key) => !(key in TRANSLATIONS)).sort();
     expect(missing, `missing EN entries:\n${missing.join("\n")}`).toEqual([]);
+  });
+
+  it("translates interpolated status lines segment by segment", () => {
+    setLocale("es-ES");
+    expect(t("1 of 1 running · tunnel edgepass-mcp up")).toBe(
+      "1 de 1 corriendo · túnel edgepass-mcp arriba",
+    );
+    expect(t("Sealed (1/5)")).toBe("Sellado (1/5)");
+    expect(t("binary missing: C:\\tools\\x.exe")).toBe("falta el binario: C:\\tools\\x.exe");
+    setLocale("en-US");
+    expect(t("1 of 1 running")).toBe("1 of 1 running");
   });
 });
