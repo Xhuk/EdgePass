@@ -1091,7 +1091,7 @@ export default function App() {
         message: string;
         synced: number | null;
       }>("bootstrap");
-      setBootMsg(result.message);
+      setBootMsg(t(result.message));
       const s = await refreshStatus();
       await runSearch("");
       if (result.synced != null) setToast(`${result.synced} secretos listos`);
@@ -2070,7 +2070,7 @@ export default function App() {
         ],
         replaceAll: true,
       });
-      setToast(result.message);
+      setToast(t(result.message));
       closeLoginRow();
       await loadLoginRows();
       await refreshStatus();
@@ -2782,7 +2782,7 @@ export default function App() {
         })),
         replaceAll: loginReplaceAll,
       });
-      setToast(result.message);
+      setToast(t(result.message));
       setLoginDrafts([]);
       setLoginFileName(null);
       if (loginFileRef.current) loginFileRef.current.value = "";
@@ -2885,10 +2885,10 @@ export default function App() {
    */
   const ledTitle = (led: ToggleView) => {
     const dir: "on" | "off" = led.state.on ? "off" : "on";
-    const lines = [`${led.label} · ${led.state.detail}`];
+    const lines = [`${led.label} · ${t(led.state.detail)}`];
     if (led.on || led.off) {
-      lines.push(`Click = ${dir} · ${dir === "on" ? led.docs.on : led.docs.off}`);
-      if (led.alt && led.docs.alt) lines.push(`Ctrl/clic derecho = ${led.docs.alt}`);
+      lines.push(`Click = ${dir} · ${t(dir === "on" ? led.docs.on : led.docs.off)}`);
+      if (led.alt && led.docs.alt) lines.push(`${t("Ctrl / right click")} = ${t(led.docs.alt)}`);
     } else {
       lines.push(t("Read-only: no action."));
     }
@@ -2958,7 +2958,7 @@ export default function App() {
               : undefined
           }
           title={ledTitle(led)}
-          aria-label={`${led.label} · ${led.docs.probe}`}
+          aria-label={`${led.label} · ${t(led.docs.probe)}`}
           aria-pressed={led.state.on}
         >
           <span className="led" aria-hidden />
@@ -4288,8 +4288,9 @@ export default function App() {
                       </button>
                     </div>
                     <p className="hint">
-                      {mcpLive?.detail ??
-                        t("Rows with «auto» start with edgePass — and edgePass starts at logon, so that is the persistence.")}
+                      {mcpLive?.detail
+                        ? t(mcpLive.detail)
+                        : t("Rows with «auto» start with edgePass — and edgePass starts at logon, so that is the persistence.")}
                     </p>
 
                     <div className="mcp-list">
@@ -4353,7 +4354,7 @@ export default function App() {
                                 ×
                               </button>
                             </div>
-                            {live?.detail && <div className="mcp-detail">{live.detail}</div>}
+                            {live?.detail && <div className="mcp-detail">{t(live.detail)}</div>}
                             {/* Tres formas de ejecutar, y el panel nombra las tres.
                                 Antes eran cinco campos sueltos sin etiqueta: el
                                 modelo solo lo entendía quien lo escribió. */}
@@ -4722,7 +4723,7 @@ export default function App() {
                                   taskName: string;
                                 }>("autostart_remove");
                                 setAutostart(s);
-                                setToast(s.message);
+                                setToast(t(s.message));
                               } else {
                                 const s = await invoke<{
                                   installed: boolean;
@@ -4731,7 +4732,7 @@ export default function App() {
                                   taskName: string;
                                 }>("autostart_install");
                                 setAutostart(s);
-                                setToast(s.message);
+                                setToast(t(s.message));
                               }
                             } catch (e) {
                               setError(String(e));
@@ -4749,7 +4750,7 @@ export default function App() {
                       </div>
                       <p className="hint">
                         {autostart
-                          ? `${autostart.installed ? "Activo" : "Inactivo"} · ${autostart.message}`
+                          ? `${t(autostart.installed ? "Active" : "Inactive")} · ${t(autostart.message)}`
                           : "…"}
                       </p>
                     </div>
@@ -5160,7 +5161,7 @@ export default function App() {
                           </div>
                           <div className="diag-row">
                             <dt>vault</dt>
-                            <dd>{diag.seal.message}</dd>
+                            <dd>{t(diag.seal.message)}</dd>
                           </div>
                           <div className="diag-row">
                             <dt>runs</dt>
