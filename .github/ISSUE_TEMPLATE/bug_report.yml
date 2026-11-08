@@ -1,0 +1,61 @@
+name: Bug report
+description: Something does not work the way the docs say
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. **Do not paste secret values, tokens or private vault paths.**
+
+        The **Logs** tab has a *Copy report* button: it includes the build, the WebView2
+        version and the last log lines, and redacts the token. Read it before pasting.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: What you see, and what you expected instead. One paragraph is enough.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to reproduce it
+      placeholder: |
+        1. Open the pill
+        2. Click KV
+        3. …
+      render: text
+
+  - type: input
+    id: version
+    attributes:
+      label: edgePass version
+      description: "From the Logs tab, or `ping` → version. The running app may differ from the installed one."
+      placeholder: "0.5.1"
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 23H2"
+    validations:
+      required: true
+
+  - type: input
+    id: openbao
+    attributes:
+      label: OpenBao version and mount
+      description: "Version, and whether the `kv` mount is v1 or v2 (the log says it per namespace)."
+      placeholder: "2.0.1 · KV v2"
+
+  - type: textarea
+    id: report
+    attributes:
+      label: Copy report (optional)
+      description: Paste the *Copy report* output. It never includes the token.
+      render: text

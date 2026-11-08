@@ -96,3 +96,14 @@ to prevent it.
 
 Tell the repository owner. The value is not copied into the chat, the issue or the
 report. It is rotated, and the rotation is the containment.
+
+## Reporting a problem
+
+- **A bug or a question** → [open an issue](https://github.com/Xhuk/EdgePass/issues/new/choose).
+  The forms ask for the version and the *Copy report* output, which redacts the token.
+- **A vulnerability** → do **not** open a public issue. Use
+  [private vulnerability reporting](https://github.com/Xhuk/EdgePass/security/advisories/new).
+  If it is unavailable, contact the repository owner directly.
+- Never paste a secret value, a vault token or an init file into an issue. A public
+  issue is permanent; a rotation is not.
+

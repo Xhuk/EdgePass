@@ -1,0 +1,36 @@
+name: Feature request
+description: Something edgePass should do, or do differently
+title: "[idea] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do that is hard or impossible today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+      description: The shape of the solution, if you have one. "I do not know" is a valid answer.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do instead today
+      description: A workaround, another tool, a script. It tells us how much the gap costs.
+      render: text
+
+  - type: checkboxes
+    id: boundaries
+    attributes:
+      label: Boundaries
+      description: edgePass is a local console, not a server. These are on purpose, not bugs.
+      options:
+        - label: I read that edgePass does not run a public endpoint (it is not a secrets server)
+        - label: I read that every vault request must go to loopback

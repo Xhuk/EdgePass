@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://github.com/Xhuk/EdgePass/wiki
+    about: Install, day-to-day operations and the LED contract.
+  - name: Security issue
+    url: https://github.com/Xhuk/EdgePass/security/advisories/new
+    about: Report a vulnerability privately. Please do not open a public issue for it.
