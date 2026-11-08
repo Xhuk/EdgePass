@@ -1657,25 +1657,29 @@ html.is-morphing .dock-tab {
 }
 
 .hit-top {
-  /* A row is a three-column table: the key takes the room, the notes badge sits
-     just left of the count, and the count is pinned to the right edge so every
-     number in the list lines up on the same axis (right-aligned, tabular). */
+  /* A row is two columns: the key takes the room, and every badge lives in one
+     flex box pinned to the right edge. Per-badge grid columns left a 34 px hole
+     whenever a row had notes but no uses, so the numbers did not line up. */
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 6px;
-  align-items: baseline;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
 }
 
 .hit-count {
-  grid-column: 3;
-  justify-self: end;
   text-align: right;
   min-width: 34px;
 }
 
-.notes-badge {
-  grid-column: 2;
-  justify-self: end;
+/* Notes are metadata, not a second counter: no pill, muted, on the sub row. */
+.note-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  color: var(--text-3);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
 }
 
 .hit-key {

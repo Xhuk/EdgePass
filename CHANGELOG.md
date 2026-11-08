@@ -4,6 +4,36 @@ All notable changes to edgePass. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions are
 `MAJOR.MINOR.PATCH` and a release is a `vX.Y.Z` tag in this repo.
 
+## 0.5.2 — 2026-11-08
+
+### Changed
+
+- **English is the identity language.** The interface and the backend copy are
+  written in English and Spanish is a translation (`src/i18n.ts`), so a string
+  without one renders in English instead of disappearing. Text emitted by Rust —
+  LED details, status lines, errors — is translated at display, including the
+  interpolated ones (`1 of 1 running · tunnel X up` → `1 de 1 corriendo · túnel X
+  arriba`).
+- **Brand.** New candado icons for the app and the installer, and the site uses the
+  banner lockup with per-theme favicons and a 1200×630 social card.
+- Docs: `OPERATIONS.md` in English (Spanish kept as `OPERATIONS.es.md`), a
+  `docs/README.md` index, issue forms, and a one-way mirror to the GitHub wiki.
+
+### Fixed
+
+- **Secrets list:** one number per row (times used) and notes moved to the metadata
+  line. The badges no longer misalign depending on which one a row had.
+- **Dock:** the size verification waits for the resize to land instead of measuring
+  mid-animation. Collapsing from the panel is one settle, not three corrections
+  (581 → 98 → 71) with three springs.
+
+### Security
+
+- `localhost` is rewritten to `127.0.0.1` before any URL is built, so a poisoned
+  `hosts` file cannot redirect the token.
+- Vault errors forward only `errors[]`; `request_id` and `warnings` no longer reach
+  the UI, the log or an agent.
+
 ## 0.5.1 — 2026-11-07
 
 ### Added

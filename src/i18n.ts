@@ -109,6 +109,8 @@ const ES: Record<string, string> = {
   "Copy user": "Copiar usuario",
   "Copy value": "Copiar valor",
   "Ctrl / right click": "Ctrl / clic derecho",
+  "note(s)": "nota(s)",
+  "times used": "veces usado",
   "Active": "Activo",
   "Inactive": "Inactivo",
   "Delete saved token": "Borrar token guardado",

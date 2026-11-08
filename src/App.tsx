@@ -1366,8 +1366,14 @@ export default function App() {
       traceUi(`dock verify vp=${vw} need=${need2.w} want=${want} isla=${dockIsland ? 1 : 0}`);
       if (vw <= want + 12 || checks++ >= 3) return;
       traceUi(`dock corrige: vp=${vw} > need=${want} (intento ${checks})`);
-      void sizeDockTo(edge, want, need2.h, { remember: !dockIsland }).catch(() => undefined);
-      later(verify, 300);
+      // Verify only after the resize has actually landed: a fixed delay measured
+      // a window that was still animating, so one collapse became three
+      // corrections (581 → 98 → 71) and three springs on screen.
+      void sizeDockTo(edge, want, need2.h, { remember: !dockIsland })
+        .catch(() => undefined)
+        .finally(() => {
+          if (alive()) later(verify, 120);
+        });
     };
     const apply = () => {
       if (!alive()) return;
@@ -1390,8 +1396,11 @@ export default function App() {
             ? Math.max(DOCK_ISLAND_W, need.w)
             : need.w;
       traceUi(`dock fit need=${need.w}x${need.h} isla=${dockIsland ? 1 : 0}`);
-      void sizeDockTo(edge, w, need.h, { remember: !dockIsland }).catch(() => undefined);
-      later(verify, 340);
+      void sizeDockTo(edge, w, need.h, { remember: !dockIsland })
+        .catch(() => undefined)
+        .finally(() => {
+          if (alive()) later(verify, 140);
+        });
     };
     const id = requestAnimationFrame(apply);
     return () => {
@@ -3475,11 +3484,35 @@ export default function App() {
                                     <div className="hit-top">
                                       <span className="hit-key">{hit.key}</span>
                                       {hit.useCount > 0 && (
-                                        <span className="badge hit-count">{hit.useCount}×</span>
+                                        <span className="badge hit-count" title={t("times used")}>
+                                          {hit.useCount}×
+                                        </span>
                                       )}
+                                    </div>
+                                    <div className="hit-sub">
+                                      <span className="ns">{displayNs(hit.namespace)}</span>
+                                      <span className="path">{hit.path}</span>
                                       {hit.notes > 0 && (
-                                        <span className="badge notes-badge" title={`${hit.notes} nota(s)`}>
-                                          🗒 {hit.notes}
+                                        <span
+                                          className="note-count"
+                                          title={`${hit.notes} ${t("note(s)")}`}
+                                        >
+                                          <svg viewBox="0 0 16 16" width="10" height="10" aria-hidden="true">
+                                            <path
+                                              d="M3.2 2.2h6.2l3.4 3.4v8.2H3.2z"
+                                              fill="none"
+                                              stroke="currentColor"
+                                              strokeWidth="1.4"
+                                              strokeLinejoin="round"
+                                            />
+                                            <path
+                                              d="M5.6 8h4.8M5.6 10.4h4.8"
+                                              stroke="currentColor"
+                                              strokeWidth="1.4"
+                                              strokeLinecap="round"
+                                            />
+                                          </svg>
+                                          {hit.notes}
                                         </span>
                                       )}
                                     </div>
