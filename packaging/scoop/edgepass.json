@@ -1,5 +1,5 @@
 {
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Desktop console for a local OpenBao vault: secrets to processes, never to chat or logs.",
   "homepage": "https://github.com/Xhuk/EdgePass",
   "license": "MIT",
@@ -10,16 +10,21 @@
     "Quit edgePass before 'scoop update edgepass': Windows cannot replace a running .exe.",
     "The binary is self-signed, so SmartScreen may warn about the publisher.",
     "Config lives in %APPDATA%\\edgePass; index, logs and placement live in %LOCALAPPDATA%\\edgePass. Uninstalling does not delete either.",
-    "If you enabled start-at-logon, Ajustes has the button that removes it; the uninstaller also removes the task."
+    "If you enabled start-at-logon, Settings has the button that removes it; the uninstaller also removes the task."
   ],
   "architecture": {
     "64bit": {
-      "url": "https://github.com/Xhuk/EdgePass/releases/download/v0.5.1/edgepass.exe",
-      "hash": "bcad9c62deb6267bf22aadf8a65b6644214be5130ae2e946049fa7f8dc1ce068"
+      "url": "https://github.com/Xhuk/EdgePass/releases/download/v0.5.2/edgepass.exe",
+      "hash": "68bb878006bc723378c1909861d55be43549686d95c5b8920baa6ad49bc11ac3"
     }
   },
   "bin": "edgepass.exe",
-  "shortcuts": [["edgepass.exe", "edgePass"]],
+  "shortcuts": [
+    [
+      "edgepass.exe",
+      "edgePass"
+    ]
+  ],
   "post_uninstall": [
     "powershell -NoProfile -Command \"cmdkey /delete:bao_token.edgepass | Out-Null; Unregister-ScheduledTask -TaskName 'edgePass' -Confirm:$false -ErrorAction SilentlyContinue; exit 0\""
   ],
